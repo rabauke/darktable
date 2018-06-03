@@ -40,7 +40,6 @@
 #endif
 
 #define REDUCESIZE 64
-#define MAX_PROFILES 30
 #define NUM_BUCKETS 4
 
 typedef enum dt_iop_denoiseprofile_mode_t
@@ -125,7 +124,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     if(!memcmp(interpolated.a, o->a, sizeof(float) * 3) && !memcmp(interpolated.b, o->b, sizeof(float) * 3))
     {
       // set the param a[0] to -1.0 to signal the autodetection
-      n->a[0] = -1.0;
+      n->a[0] = -1.0f;
     }
     return 0;
   }
@@ -206,7 +205,7 @@ static inline float fast_mexp2f(const float x)
   const float i2 = (float)0x3f000000u; // 2^-1
   const float k0 = i1 + x * (i2 - i1);
   floatint_t k;
-  k.i = k0 >= (float)0x800000u ? k0 : 0;
+  k.i = k0 >= (float)0x800000u ? (u_int32_t)k0 : 0;
   return k.f;
 }
 
@@ -218,9 +217,10 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 
   if(d->mode == MODE_NLMEANS)
   {
-    const int P
-        = ceilf(d->radius * fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f)); // pixel filter size
-    const int K = ceilf(7 * fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f)); // nbhood
+    const unsigned int P = (unsigned int)ceilf(d->radius * fminf(roi_in->scale, 2.0f)
+                                               / fmaxf(piece->iscale, 1.0f)); // pixel filter size
+    const unsigned int K
+        = (unsigned int)ceilf(7 * fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f)); // nbhood
 
     tiling->factor = 4.0f + 0.25f * NUM_BUCKETS; // in + out + (2 + NUM_BUCKETS * 0.25) tmp
     tiling->maxbuf = 1.0f;
@@ -235,23 +235,22 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
     int max_scale = 0;
     const float scale = roi_in->scale / piece->iscale;
     // largest desired filter on input buffer (20% of input dim)
-    const float supp0
-        = MIN(2 * (2 << (max_max_scale - 1)) + 1,
-              MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+    const float supp0 = MIN(3, // = 2 * (2u << (max_max_scale - 1)) + 1
+                            MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
     const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
     for(; max_scale < max_max_scale; max_scale++)
     {
       // actual filter support on scaled buffer
-      const float supp = 2 * (2 << max_scale) + 1;
+      const float supp = 2 * (2u << max_scale) + 1;
       // approximates this filter size on unscaled input image:
       const float supp_in = supp * (1.0f / scale);
-      const float i_in = dt_log2f((supp_in - 1) * .5f) - 1.0f;
+      const float i_in = dt_log2f((supp_in - 1.0f) * .5f) - 1.0f;
       // i_in = max_scale .. .. .. 0
       const float t = 1.0f - (i_in + .5f) / i0;
       if(t < 0.0f) break;
     }
 
-    const int max_filter_radius = (1 << max_scale); // 2 * 2^max_scale
+    const unsigned int max_filter_radius = (1u << max_scale); // 2 * 2^max_scale
 
     tiling->factor = 3.5f + max_scale; // in + out + tmp + reducebuffer + scale buffers
     tiling->maxbuf = 1.0f;
@@ -261,16 +260,16 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
     tiling->yalign = 1;
   }
 
-  return;
 }
 
+// perform Generalized Anscombe transformation
+// see https://en.wikipedia.org/wiki/Anscombe_transform
 static inline void precondition(const float *const in, float *const buf, const int wd, const int ht,
                                 const float a[3], const float b[3])
 {
-  const float sigma2[3]
-      = { (b[0] / a[0]) * (b[0] / a[0]),
-          (b[1] / a[1]) * (b[1] / a[1]),
-          (b[2] / a[2]) * (b[2] / a[2]) };
+  const float sigma2_plus_3_8[3]
+      = { (b[0] / a[0]) * (b[0] / a[0]) + 3.0f / 8.0f, (b[1] / a[1]) * (b[1] / a[1]) + 3.0f / 8.0f,
+          (b[2] / a[2]) * (b[2] / a[2]) + 3.0f / 8.0f };
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) default(none) shared(a)
@@ -283,8 +282,7 @@ static inline void precondition(const float *const in, float *const buf, const i
     {
       for(int c = 0; c < 3; c++)
       {
-        buf2[c] = in2[c] / a[c];
-        const float d = fmaxf(0.0f, buf2[c] + 3. / 8. + sigma2[c]);
+        const float d = fmaxf(0.0f, in2[c] / a[c] + sigma2_plus_3_8[c]);
         buf2[c] = 2.0f * sqrtf(d);
       }
       buf2 += 4;
@@ -293,14 +291,19 @@ static inline void precondition(const float *const in, float *const buf, const i
   }
 }
 
+// perform inverse Generalized Anscombe transformation
+// see https://en.wikipedia.org/wiki/Anscombe_transform
 static inline void backtransform(float *const buf, const int wd, const int ht, const float a[3],
                                  const float b[3])
 {
-  const float sigma2[3]
-      = { (b[0] / a[0]) * (b[0] / a[0]),
-          (b[1] / a[1]) * (b[1] / a[1]),
-          (b[2] / a[2]) * (b[2] / a[2]) };
-
+  const float sigma2_plus_1_8[3]
+      = { (b[0] / a[0]) * (b[0] / a[0]) + 1.f / 8.f, (b[1] / a[1]) * (b[1] / a[1]) + 1.f / 8.f,
+          (b[2] / a[2]) * (b[2] / a[2]) + 1.f / 8.f };
+  const float sqrt_3_2 = sqrtf(3.f / 2.f);
+  const float c1 = 1.f / 4.f;
+  const float c2 = 1.f / 4.f * sqrt_3_2;
+  const float c3 = 11.f / 8.f;
+  const float c4 = 5.f / 8.f * sqrt_3_2;
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) default(none) shared(a)
 #endif
@@ -311,13 +314,12 @@ static inline void backtransform(float *const buf, const int wd, const int ht, c
     {
       for(int c = 0; c < 3; c++)
       {
-        const float x = buf2[c];
+        const float x = buf2[c], x2 = x * x;
         // closed form approximation to unbiased inverse (input range was 0..200 for fit, not 0..1)
-        if(x < .5f)
+        if(x < 0.5f)
           buf2[c] = 0.0f;
         else
-          buf2[c] = 1. / 4. * x * x + 1. / 4. * sqrtf(3. / 2.) / x - 11. / 8. * 1.0 / (x * x)
-                    + 5. / 8. * sqrtf(3. / 2.) * 1.0 / (x * x * x) - 1. / 8. - sigma2[c];
+          buf2[c] = c1 * x2 + c2 / x - c3 / x2 + c4 / (x * x2) - sigma2_plus_1_8[c];
         // asymptotic form:
         // buf2[c] = fmaxf(0.0f, 1./4.*x*x - 1./8. - sigma2[c]);
         buf2[c] *= a[c];
@@ -336,17 +338,17 @@ static inline float weight(const float *c1, const float *c2, const float inv_sig
 // return _mm_set1_ps(1.0f);
 #if 1
   // 3d distance based on color
-  float diff[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+  float diff[4];
   for(int c = 0; c < 4; c++) diff[c] = c1[c] - c2[c];
 
-  float sqr[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+  float sqr[4];
   for(int c = 0; c < 4; c++) sqr[c] = diff[c] * diff[c];
 
   const float dot = (sqr[0] + sqr[1] + sqr[2]) * inv_sigma2;
   const float var
       = 0.02f; // FIXME: this should ideally depend on the image before noise stabilizing transforms!
   const float off2 = 9.0f; // (3 sigma)^2
-  return fast_mexp2f(MAX(0, dot * var - off2));
+  return fast_mexp2f(MAX(0.0f, dot * var - off2));
 #endif
 }
 
@@ -363,72 +365,68 @@ static inline __m128 weight_sse(const __m128 *c1, const __m128 *c2, const float 
   const float var
       = 0.02f; // FIXME: this should ideally depend on the image before noise stabilizing transforms!
   const float off2 = 9.0f; // (3 sigma)^2
-  return _mm_set1_ps(fast_mexp2f(MAX(0, dot * var - off2)));
+  return _mm_set1_ps(fast_mexp2f(MAX(0.0f, dot * var - off2)));
 #endif
 }
 #endif
 
-#define SUM_PIXEL_CONTRIBUTION_COMMON(ii, jj)                                                                \
-  do                                                                                                         \
-  {                                                                                                          \
-    const float f = filter[(ii)] * filter[(jj)];                                                             \
-    const float wp = weight(px, px2, inv_sigma2);                                                            \
-    const float w = f * wp;                                                                                  \
-    float pd[4] = { 0.0f, 0.0f, 0.0f, 0.0f };                                                                \
-    for(int c = 0; c < 4; c++) pd[c] = w * px2[c];                                                           \
-    for(int c = 0; c < 4; c++) sum[c] += pd[c];                                                              \
-    for(int c = 0; c < 4; c++) wgt[c] += w;                                                                  \
-  } while(0)
+#define SUM_PIXEL_CONTRIBUTION_COMMON(ii, jj)                                                                     \
+  {                                                                                                               \
+    const float f = filter[(ii)] * filter[(jj)];                                                                  \
+    const float wp = weight(px, px2, inv_sigma2);                                                                 \
+    const float w = f * wp;                                                                                       \
+    float pd[4];                                                                                                  \
+    for(int c = 0; c < 4; c++) pd[c] = w * px2[c];                                                                \
+    for(int c = 0; c < 4; c++) sum[c] += pd[c];                                                                   \
+    for(int c = 0; c < 4; c++) wgt[c] += w;                                                                       \
+  }
 
 #if defined(__SSE__)
-#define SUM_PIXEL_CONTRIBUTION_COMMON_SSE(ii, jj)                                                            \
-  do                                                                                                         \
-  {                                                                                                          \
-    const __m128 f = _mm_set1_ps(filter[(ii)] * filter[(jj)]);                                               \
-    const __m128 wp = weight_sse(px, px2, inv_sigma2);                                                       \
-    const __m128 w = _mm_mul_ps(f, wp);                                                                      \
-    const __m128 pd = _mm_mul_ps(w, *px2);                                                                   \
-    sum = _mm_add_ps(sum, pd);                                                                               \
-    wgt = _mm_add_ps(wgt, w);                                                                                \
-  } while(0)
+#define SUM_PIXEL_CONTRIBUTION_COMMON_SSE(ii, jj)                                                                 \
+  {                                                                                                               \
+    const __m128 f = _mm_set1_ps(filter[(ii)] * filter[(jj)]);                                                    \
+    const __m128 wp = weight_sse(px, px2, inv_sigma2);                                                            \
+    const __m128 w = _mm_mul_ps(f, wp);                                                                           \
+    const __m128 pd = _mm_mul_ps(w, *px2);                                                                        \
+    sum = _mm_add_ps(sum, pd);                                                                                    \
+    wgt = _mm_add_ps(wgt, w);                                                                                     \
+  }
 #endif
 
-#define SUM_PIXEL_CONTRIBUTION_WITH_TEST(ii, jj)                                                             \
-  do                                                                                                         \
-  {                                                                                                          \
-    const int iii = (ii)-2;                                                                                  \
-    const int jjj = (jj)-2;                                                                                  \
-    int x = i + mult * iii;                                                                                  \
-    int y = j + mult * jjj;                                                                                  \
-                                                                                                             \
-    if(x < 0) x = 0;                                                                                         \
-    if(x >= width) x = width - 1;                                                                            \
-    if(y < 0) y = 0;                                                                                         \
-    if(y >= height) y = height - 1;                                                                          \
-                                                                                                             \
-    px2 = ((float *)in) + 4 * x + (size_t)4 * y * width;                                                     \
-                                                                                                             \
-    SUM_PIXEL_CONTRIBUTION_COMMON(ii, jj);                                                                   \
-  } while(0)
+#define SUM_PIXEL_CONTRIBUTION_WITH_TEST(ii, jj)                                                                  \
+  {                                                                                                               \
+    const int iii = (ii)-2;                                                                                       \
+    const int jjj = (jj)-2;                                                                                       \
+    int x = i + mult * iii;                                                                                       \
+    int y = j + mult * jjj;                                                                                       \
+                                                                                                                  \
+    if(x < 0) x = 0;                                                                                              \
+    if(x >= width) x = width - 1;                                                                                 \
+    if(y < 0) y = 0;                                                                                              \
+    if(y >= height) y = height - 1;                                                                               \
+                                                                                                                  \
+    px2 = ((float *)in) + 4 * x + (size_t)4 * y * width;                                                          \
+                                                                                                                  \
+    SUM_PIXEL_CONTRIBUTION_COMMON(ii, jj);                                                                        \
+  }
 
 #if defined(__SSE__)
-#define SUM_PIXEL_CONTRIBUTION_WITH_TEST_SSE(ii, jj)                                                         \
-  do                                                                                                         \
-  {                                                                                                          \
-    const int iii = (ii)-2;                                                                                  \
-    const int jjj = (jj)-2;                                                                                  \
-    int x = i + mult * iii;                                                                                  \
-    int y = j + mult * jjj;                                                                                  \
-                                                                                                             \
-    if(x < 0) x = 0;                                                                                         \
-    if(x >= width) x = width - 1;                                                                            \
-    if(y < 0) y = 0;                                                                                         \
-    if(y >= height) y = height - 1;                                                                          \
-                                                                                                             \
-    px2 = ((__m128 *)in) + x + (size_t)y * width;                                                            \
-                                                                                                             \
-    SUM_PIXEL_CONTRIBUTION_COMMON_SSE(ii, jj);                                                               \
-  } while(0)
+#define SUM_PIXEL_CONTRIBUTION_WITH_TEST_SSE(ii, jj)                                                              \
+  {                                                                                                               \
+    const int iii = (ii)-2;                                                                                       \
+    const int jjj = (jj)-2;                                                                                       \
+    int x = i + mult * iii;                                                                                       \
+    int y = j + mult * jjj;                                                                                       \
+                                                                                                                  \
+    if(x < 0) x = 0;                                                                                              \
+    if(x >= width) x = width - 1;                                                                                 \
+    if(y < 0) y = 0;                                                                                              \
+    if(y >= height) y = height - 1;                                                                               \
+                                                                                                                  \
+    px2 = ((__m128 *)in) + x + (size_t)y * width;                                                                 \
+                                                                                                                  \
+    SUM_PIXEL_CONTRIBUTION_COMMON_SSE(ii, jj);                                                                    \
+  }
 #endif
 
 #define ROW_PROLOGUE                                                                                         \
@@ -784,16 +782,16 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 
 #define MAX_MAX_SCALE (5) // hard limit
 
-  int max_scale = 0;
+  unsigned int max_scale = 0;
   const float in_scale = roi_in->scale / piece->iscale;
   // largest desired filter on input buffer (20% of input dim)
-  const float supp0 = MIN(2 * (2 << (MAX_MAX_SCALE - 1)) + 1,
+  const float supp0 = MIN(2 * (2u << (MAX_MAX_SCALE - 1)) + 1,
                           MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   for(; max_scale < MAX_MAX_SCALE; max_scale++)
   {
     // actual filter support on scaled buffer
-    const float supp = 2 * (2 << max_scale) + 1;
+    const float supp = 2 * (2u << max_scale) + 1;
     // approximates this filter size on unscaled input image:
     const float supp_in = supp * (1.0f / in_scale);
     const float i_in = dt_log2f((supp_in - 1) * .5f) - 1.0f;
@@ -879,7 +877,7 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   }
 
   // now do everything backwards, so the result will end up in *ovoid
-  for(int scale = max_scale - 1; scale >= 0; scale--)
+  for(int scale = max_scale - 1; max_scale > 0 && scale >= 0; scale--)
   {
 #if 1
     // variance stabilizing transform maps sigma to unity.
@@ -938,9 +936,9 @@ static void process_nlmeans(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
 
   // TODO: fixed K to use adaptive size trading variance and bias!
   // adjust to zoom size:
-  const float scale = fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f);
-  const int P = ceilf(d->radius * scale); // pixel filter size
-  const int K = ceilf(7 * scale);         // nbhood
+  const float scale = fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f);
+  const int P = (int)ceilf(d->radius * scale); // pixel filter size
+  const int K = (int)ceilf(7 * scale);         // nbhood
 
   // P == 0 : this will degenerate to a (fast) bilateral filter.
 
@@ -1086,9 +1084,9 @@ static void process_nlmeans_sse(struct dt_iop_module_t *self, dt_dev_pixelpipe_i
 
   // TODO: fixed K to use adaptive size trading variance and bias!
   // adjust to zoom size:
-  const float scale = fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f);
-  const int P = ceilf(d->radius * scale); // pixel filter size
-  const int K = ceilf(7 * scale);         // nbhood
+  const float scale = fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f);
+  const int P = (int)ceilf(d->radius * scale); // pixel filter size
+  const int K = (int)ceilf(7 * scale);         // nbhood
 
   // P == 0 : this will degenerate to a (fast) bilateral filter.
 
@@ -1307,9 +1305,9 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
 
   cl_int err = -999;
 
-  const float scale = fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f);
-  const int P = ceilf(d->radius * scale); // pixel filter size
-  const int K = ceilf(7 * scale);         // nbhood
+  const float scale = fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f);
+  const int P = (int)ceilf(d->radius * scale); // pixel filter size
+  const int K = (int)ceilf(7 * scale);         // nbhood
   const float norm = 0.015f / (2 * P + 1);
 
 
@@ -1334,10 +1332,14 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
   }
 
   int hblocksize;
-  dt_opencl_local_buffer_t hlocopt
-    = (dt_opencl_local_buffer_t){ .xoffset = 2 * P, .xfactor = 1, .yoffset = 0, .yfactor = 1,
-                                  .cellsize = sizeof(float), .overhead = 0,
-                                  .sizex = 1 << 16, .sizey = 1 };
+  dt_opencl_local_buffer_t hlocopt = (dt_opencl_local_buffer_t){ .xoffset = 2 * P,
+                                                                 .xfactor = 1,
+                                                                 .yoffset = 0,
+                                                                 .yfactor = 1,
+                                                                 .cellsize = sizeof(float),
+                                                                 .overhead = 0,
+                                                                 .sizex = 1u << 16,
+                                                                 .sizey = 1 };
 
   if(dt_opencl_local_buffer_opt(devid, gd->kernel_denoiseprofile_horiz, &hlocopt))
     hblocksize = hlocopt.sizex;
@@ -1345,10 +1347,14 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
     hblocksize = 1;
 
   int vblocksize;
-  dt_opencl_local_buffer_t vlocopt
-    = (dt_opencl_local_buffer_t){ .xoffset = 1, .xfactor = 1, .yoffset = 2 * P, .yfactor = 1,
-                                  .cellsize = sizeof(float), .overhead = 0,
-                                  .sizex = 1, .sizey = 1 << 16 };
+  dt_opencl_local_buffer_t vlocopt = (dt_opencl_local_buffer_t){ .xoffset = 1,
+                                                                 .xfactor = 1,
+                                                                 .yoffset = 2 * P,
+                                                                 .yfactor = 1,
+                                                                 .cellsize = sizeof(float),
+                                                                 .overhead = 0,
+                                                                 .sizex = 1,
+                                                                 .sizey = 1u << 16 };
 
   if(dt_opencl_local_buffer_opt(devid, gd->kernel_denoiseprofile_vert, &vlocopt))
     vblocksize = vlocopt.sizey;
@@ -1488,17 +1494,16 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   dt_iop_denoiseprofile_global_data_t *gd = (dt_iop_denoiseprofile_global_data_t *)self->data;
 
   const int max_max_scale = 5; // hard limit
-  int max_scale = 0;
+  unsigned int max_scale = 0;
   const float scale = roi_in->scale / piece->iscale;
   // largest desired filter on input buffer (20% of input dim)
-  const float supp0
-      = MIN(2 * (2 << (max_max_scale - 1)) + 1,
-            MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+  const float supp0 = MIN(3, // = 2 * (2u << (max_max_scale - 1)) + 1,
+                          MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   for(; max_scale < max_max_scale; max_scale++)
   {
     // actual filter support on scaled buffer
-    const float supp = 2 * (2 << max_scale) + 1;
+    const float supp = 2 * (2u << max_scale) + 1;
     // approximates this filter size on unscaled input image:
     const float supp_in = supp * (1.0f / scale);
     const float i_in = dt_log2f((supp_in - 1) * .5f) - 1.0f;
@@ -1848,7 +1853,7 @@ void reload_defaults(dt_iop_module_t *module)
     g->interpolated = dt_noiseprofile_generic; // default to generic poissonian
     g_strlcpy(name, _(g->interpolated.name), sizeof(name));
 
-    const int iso = module->dev->image_storage.exif_iso;
+    const int iso = (int)module->dev->image_storage.exif_iso;
     dt_noiseprofile_t *last = NULL;
     for(GList *iter = g->profiles; iter; iter = g_list_next(iter))
     {
@@ -1858,7 +1863,7 @@ void reload_defaults(dt_iop_module_t *module)
       {
         g->interpolated = *current;
         // signal later autodetection in commit_params:
-        g->interpolated.a[0] = -1.0;
+        g->interpolated.a[0] = -1.0f;
         snprintf(name, sizeof(name), _("found match for ISO %d"), iso);
         break;
       }
@@ -1866,7 +1871,7 @@ void reload_defaults(dt_iop_module_t *module)
       {
         dt_noiseprofile_interpolate(last, current, &g->interpolated);
         // signal later autodetection in commit_params:
-        g->interpolated.a[0] = -1.0;
+        g->interpolated.a[0] = -1.0f;
         snprintf(name, sizeof(name), _("interpolated from ISO %d and %d"), last->iso, current->iso);
         break;
       }
@@ -1953,7 +1958,7 @@ static dt_noiseprofile_t dt_iop_denoiseprofile_get_auto_profile(dt_iop_module_t 
   GList *profiles = dt_noiseprofile_get_matching(&self->dev->image_storage);
   dt_noiseprofile_t interpolated = dt_noiseprofile_generic; // default to generic poissonian
 
-  const int iso = self->dev->image_storage.exif_iso;
+  const int iso = (int)self->dev->image_storage.exif_iso;
   dt_noiseprofile_t *last = NULL;
   for(GList *iter = profiles; iter; iter = g_list_next(iter))
   {
@@ -2094,8 +2099,8 @@ void gui_init(dt_iop_module_t *self)
   g->profiles = NULL;
   g->profile = dt_bauhaus_combobox_new(self);
   g->mode = dt_bauhaus_combobox_new(self);
-  g->radius = dt_bauhaus_slider_new_with_range(self, 0.0f, 4.0f, 1., 1.f, 0);
-  g->strength = dt_bauhaus_slider_new_with_range(self, 0.001f, 4.0f, .05, 1.f, 3);
+  g->radius = dt_bauhaus_slider_new_with_range(self, 0.0f, 4.0f, 1.0f, 1.0f, 0);
+  g->strength = dt_bauhaus_slider_new_with_range(self, 0.001f, 4.0f, .05, 1.0f, 3);
   gtk_box_pack_start(GTK_BOX(self->widget), g->profile, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), g->mode, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), g->radius, TRUE, TRUE, 0);
