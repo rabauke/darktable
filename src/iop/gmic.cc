@@ -34,7 +34,6 @@ extern "C"
 #include <CImg.h>
 #include <cstddef>
 #include <cstdlib>
-#include <cstring>
 #include <gmic.h>
 
 //----------------------------------------------------------------------
@@ -43,11 +42,9 @@ extern "C"
 
 DT_MODULE_INTROSPECTION(1, dt_iop_gmic_params_t)
 
-constexpr int command_len = 1024;
-
 typedef struct dt_iop_gmic_params_t
 {
-  char command[command_len + 1];
+  char command[1024];
 } dt_iop_gmic_params_t;
 
 // types  dt_iop_gmic_params_t and dt_iop_gmic_data_t are
@@ -87,12 +84,12 @@ extern "C" void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe
 extern "C" void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   std::free(piece->data);
-  piece->data = NULL;
+  piece->data = nullptr;
 }
 
 extern "C" void init_global(dt_iop_module_so_t *self)
 {
-  self->data = NULL;
+  self->data = nullptr;
 }
 
 extern "C" void cleanup_global(dt_iop_module_so_t *self)
@@ -106,8 +103,8 @@ extern "C" void init(dt_iop_module_t *self)
   self->default_enabled = 0;
   self->priority = 998; // module order created by iop_dependencies.py, do not edit!
   self->params_size = sizeof(dt_iop_gmic_params_t);
-  self->gui_data = NULL;
-  dt_iop_gmic_params_t tmp = (dt_iop_gmic_params_t){ "" };
+  self->gui_data = nullptr;
+  dt_iop_gmic_params_t tmp{ "" };
   std::memcpy(self->params, &tmp, sizeof(dt_iop_gmic_params_t));
   std::memcpy(self->default_params, &tmp, sizeof(dt_iop_gmic_params_t));
 }
@@ -115,36 +112,33 @@ extern "C" void init(dt_iop_module_t *self)
 extern "C" void cleanup(dt_iop_module_t *self)
 {
   std::free(self->params);
-  self->params = NULL;
+  self->params = nullptr;
 }
 
-static void command_callback(GtkWidget *entry, gpointer user_data)
+static void command_callback(GtkWidget *w, dt_iop_module_t *self)
 {
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(self->dt->gui->reset) return;
-  dt_iop_gmic_params_t *p = (dt_iop_gmic_params_t *)self->params;
-  snprintf(p->command, sizeof(p->command), "%s", gtk_entry_get_text(GTK_ENTRY(entry)));
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  std::snprintf(p->command, sizeof(p->command), "%s", gtk_entry_get_text(GTK_ENTRY(w)));
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 extern "C" void gui_update(struct dt_iop_module_t *self)
 {
-  dt_iop_gmic_gui_data_t *g = (dt_iop_gmic_gui_data_t *)self->gui_data;
-  dt_iop_gmic_params_t *p = (dt_iop_gmic_params_t *)self->params;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   gtk_entry_set_text(GTK_ENTRY(g->command), p->command);
 }
 
 extern "C" void gui_init(dt_iop_module_t *self)
 {
   self->gui_data = std::malloc(sizeof(dt_iop_gmic_gui_data_t));
-
-  dt_iop_gmic_gui_data_t *g = (dt_iop_gmic_gui_data_t *)self->gui_data;
-  // dt_iop_gmic_params_t *p = (dt_iop_gmic_params_t *)self->params;
-
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   g->command = gtk_entry_new();
   gtk_widget_set_tooltip_text(g->command, _("G'MIC script, confirm with enter"));
-  gtk_entry_set_max_length(GTK_ENTRY(g->command), command_len);
+  gtk_entry_set_max_length(GTK_ENTRY(g->command), sizeof(p->command) - 1);
   dt_gui_key_accel_block_on_focus_connect(g->command);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->command), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->command), "activate", G_CALLBACK(command_callback), self);
@@ -152,7 +146,6 @@ extern "C" void gui_init(dt_iop_module_t *self)
 
 extern "C" void gui_cleanup(dt_iop_module_t *self)
 {
-  // dt_iop_gmic_gui_data_t *g = (dt_iop_gmic_gui_data_t *)self->gui_data;
   std::free(self->gui_data);
   self->gui_data = nullptr;
 }
@@ -160,8 +153,7 @@ extern "C" void gui_cleanup(dt_iop_module_t *self)
 extern "C" void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  // dt_iop_gmic_gui_data_t *g = (dt_iop_gmic_gui_data_t *)self->gui_data;
-  dt_iop_gmic_params_t *d = (dt_iop_gmic_params_t *)piece->data;
+  dt_iop_gmic_params_t *d = reinterpret_cast<dt_iop_gmic_params_t *>(piece->data);
 
   const size_t ch = piece->colors;
   const size_t width = roi_in->width;
