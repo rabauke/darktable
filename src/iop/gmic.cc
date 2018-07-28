@@ -16,36 +16,26 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
 extern "C"
 {
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-}
-
-extern "C"
-{
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
-}
-
-#include <cfloat>
-extern "C"
-{
 #include <gtk/gtk.h>
 }
+
 #include <CImg.h>
-#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <gmic.h>
-#include <iostream>
-#include <sstream>
 
 //----------------------------------------------------------------------
 // implement the module api
@@ -54,8 +44,6 @@ extern "C"
 DT_MODULE_INTROSPECTION(1, dt_iop_gmic_params_t)
 
 constexpr int command_len = 1024;
-
-typedef float rgb_pixel[3];
 
 typedef struct dt_iop_gmic_params_t
 {
@@ -119,7 +107,7 @@ extern "C" void init(dt_iop_module_t *self)
   self->priority = 998; // module order created by iop_dependencies.py, do not edit!
   self->params_size = sizeof(dt_iop_gmic_params_t);
   self->gui_data = NULL;
-  dt_iop_gmic_params_t tmp = (dt_iop_gmic_params_t){ "sepia" };
+  dt_iop_gmic_params_t tmp = (dt_iop_gmic_params_t){ "" };
   std::memcpy(self->params, &tmp, sizeof(dt_iop_gmic_params_t));
   std::memcpy(self->default_params, &tmp, sizeof(dt_iop_gmic_params_t));
 }
