@@ -31,7 +31,6 @@ extern "C"
 #include <gtk/gtk.h>
 }
 
-#include "../../../../../../usr/include/c++/7/vector"
 #include <CImg.h>
 #include <algorithm>
 #include <cstddef>
