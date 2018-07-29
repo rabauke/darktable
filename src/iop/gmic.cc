@@ -31,10 +31,112 @@ extern "C"
 #include <gtk/gtk.h>
 }
 
+#include "../../../../../../usr/include/c++/7/vector"
 #include <CImg.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
 #include <gmic.h>
+#include <sstream>
+#include <string>
+#include <vector>
+
+
+// --- no filter
+
+struct dt_iop_gmic_none_params_t
+{
+  dt_iop_gmic_none_params_t()
+  {
+  }
+
+  std::string gmic_command() const
+  {
+    return "";
+  }
+
+  static void gui_update(struct dt_iop_module_t *self);
+
+  static void gui_init(dt_iop_module_t *self);
+
+  static void command_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+// --- expert mode
+
+struct dt_iop_gmic_expert_mode_params_t
+{
+  char command[1024];
+
+  dt_iop_gmic_expert_mode_params_t() : command("")
+  {
+  }
+
+  std::string gmic_command() const
+  {
+    return command;
+  }
+
+  static void gui_update(struct dt_iop_module_t *self);
+
+  static void gui_init(dt_iop_module_t *self);
+
+  static void command_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+typedef struct dt_iop_gmic_expert_mode_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *command;
+} dt_iop_gmic_expert_mode_gui_data_t;
+
+// --- sepia
+
+struct dt_iop_gmic_sepia_params_t
+{
+  float brightness, contrast, gamma;
+
+  dt_iop_gmic_sepia_params_t() : brightness(0.f), contrast(0.f), gamma(0.f)
+  {
+  }
+
+  std::string gmic_command() const
+  {
+    std::stringstream str;
+    str << "fx_sepia " << brightness * 100 << ',' << contrast * 100 << ',' << gamma * 100;
+    return str.str();
+  }
+
+  static void gui_update(struct dt_iop_module_t *self);
+
+  static void gui_init(dt_iop_module_t *self);
+
+  static void brightness_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void contrast_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void gamma_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+typedef struct dt_iop_gmic_sepia_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *brightness, *contrast, *gamma;
+} dt_iop_gmic_sepia_gui_data_t;
+
+
+enum filters
+{
+  none,
+  expert_mode,
+  sepia
+};
+
+struct dt_iop_gmic_all_params_t
+{
+  dt_iop_gmic_expert_mode_params_t expert_mode;
+  dt_iop_gmic_sepia_params_t sepia;
+};
 
 //----------------------------------------------------------------------
 // implement the module api
@@ -44,7 +146,8 @@ DT_MODULE_INTROSPECTION(1, dt_iop_gmic_params_t)
 
 typedef struct dt_iop_gmic_params_t
 {
-  char command[1024];
+  filters filter;
+  dt_iop_gmic_all_params_t parmeters;
 } dt_iop_gmic_params_t;
 
 // types  dt_iop_gmic_params_t and dt_iop_gmic_data_t are
@@ -53,7 +156,10 @@ typedef dt_iop_gmic_params_t dt_iop_gmic_data_t;
 
 typedef struct dt_iop_gmic_gui_data_t
 {
-  GtkWidget *command;
+  GtkWidget *gmic_filter;
+  std::vector<filters> filter_list;
+  dt_iop_gmic_expert_mode_gui_data_t expert_mode;
+  dt_iop_gmic_sepia_gui_data_t sepia;
 } dt_iop_gmic_gui_data_t;
 
 typedef struct dt_iop_gmic_global_data_t
@@ -104,7 +210,7 @@ extern "C" void init(dt_iop_module_t *self)
   self->priority = 998; // module order created by iop_dependencies.py, do not edit!
   self->params_size = sizeof(dt_iop_gmic_params_t);
   self->gui_data = nullptr;
-  dt_iop_gmic_params_t tmp{ "" };
+  dt_iop_gmic_params_t tmp{ none, dt_iop_gmic_all_params_t() };
   std::memcpy(self->params, &tmp, sizeof(dt_iop_gmic_params_t));
   std::memcpy(self->default_params, &tmp, sizeof(dt_iop_gmic_params_t));
 }
@@ -115,38 +221,171 @@ extern "C" void cleanup(dt_iop_module_t *self)
   self->params = nullptr;
 }
 
-static void command_callback(GtkWidget *w, dt_iop_module_t *self)
+static void filter_callback(GtkWidget *w, dt_iop_module_t *self)
 {
-  if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
-  std::snprintf(p->command, sizeof(p->command), "%s", gtk_entry_get_text(GTK_ENTRY(w)));
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  p->filter = g->filter_list[dt_bauhaus_combobox_get(w)];
+  dt_iop_gmic_none_params_t::gui_update(self);
+  dt_iop_gmic_sepia_params_t::gui_update(self);
+  dt_iop_gmic_expert_mode_params_t::gui_update(self);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
+
+
+void dt_iop_gmic_none_params_t::gui_update(struct dt_iop_module_t *self)
+{
+}
+
+void dt_iop_gmic_none_params_t::gui_init(dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_bauhaus_combobox_add(g->gmic_filter, _("none"));
+  g->filter_list.push_back(none);
+}
+
+
+void dt_iop_gmic_expert_mode_params_t::gui_update(struct dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->expert_mode.box, p->filter == expert_mode ? TRUE : FALSE);
+  gtk_entry_set_text(GTK_ENTRY(g->expert_mode.command), p->parmeters.expert_mode.command);
+}
+
+void dt_iop_gmic_expert_mode_params_t::gui_init(dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  dt_bauhaus_combobox_add(g->gmic_filter, _("expert mode"));
+  g->expert_mode.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->expert_mode.box, TRUE, TRUE, 0);
+  g->expert_mode.command = gtk_entry_new();
+  gtk_widget_set_tooltip_text(g->expert_mode.command, _("G'MIC script, confirm with enter"));
+  gtk_entry_set_max_length(GTK_ENTRY(g->expert_mode.command), sizeof(command) - 1);
+  dt_gui_key_accel_block_on_focus_connect(g->expert_mode.command);
+  gtk_box_pack_start(GTK_BOX(g->expert_mode.box), GTK_WIDGET(g->expert_mode.command), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->expert_mode.command), "activate",
+                   G_CALLBACK(dt_iop_gmic_expert_mode_params_t::command_callback), self);
+
+  gtk_widget_show_all(g->expert_mode.box);
+  gtk_widget_set_no_show_all(g->expert_mode.box, TRUE);
+  gtk_widget_set_visible(g->expert_mode.box, p->filter == expert_mode ? TRUE : FALSE);
+  g->filter_list.push_back(expert_mode);
+}
+
+void dt_iop_gmic_expert_mode_params_t::command_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  std::snprintf(p->parmeters.expert_mode.command, sizeof(p->parmeters.expert_mode.command), "%s",
+                gtk_entry_get_text(GTK_ENTRY(w)));
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+
+void dt_iop_gmic_sepia_params_t::gui_update(struct dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->sepia.box, p->filter == sepia ? TRUE : FALSE);
+  p->parmeters.sepia.brightness = dt_bauhaus_slider_get(g->sepia.brightness);
+  p->parmeters.sepia.contrast = dt_bauhaus_slider_get(g->sepia.contrast);
+  p->parmeters.sepia.gamma = dt_bauhaus_slider_get(g->sepia.gamma);
+}
+
+void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  dt_bauhaus_combobox_add(g->gmic_filter, _("sepia"));
+  g->sepia.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->sepia.box, TRUE, TRUE, 0);
+
+  g->sepia.brightness = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parmeters.sepia.brightness, 2);
+  dt_bauhaus_widget_set_label(g->sepia.brightness, NULL, _("brightness"));
+  gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia effect"));
+  gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.brightness), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sepia.brightness), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sepia_params_t::brightness_callback), self);
+
+  g->sepia.contrast = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parmeters.sepia.contrast, 2);
+  dt_bauhaus_widget_set_label(g->sepia.contrast, NULL, _("contrast"));
+  gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia effect"));
+  gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.contrast), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sepia.contrast), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sepia_params_t::contrast_callback), self);
+
+  g->sepia.gamma = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parmeters.sepia.gamma, 2);
+  dt_bauhaus_widget_set_label(g->sepia.gamma, NULL, _("gamma"));
+  gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia effect"));
+  gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.gamma), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sepia.gamma), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sepia_params_t::gamma_callback), self);
+
+  gtk_widget_show_all(g->sepia.box);
+  gtk_widget_set_no_show_all(g->sepia.box, TRUE);
+  gtk_widget_set_visible(g->sepia.box, p->filter == sepia ? TRUE : FALSE);
+  g->filter_list.push_back(sepia);
+}
+
+void dt_iop_gmic_sepia_params_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  p->parmeters.sepia.brightness = dt_bauhaus_slider_get(g->sepia.brightness);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_sepia_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  p->parmeters.sepia.contrast = dt_bauhaus_slider_get(g->sepia.contrast);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_sepia_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  p->parmeters.sepia.gamma = dt_bauhaus_slider_get(g->sepia.gamma);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
 
 extern "C" void gui_update(struct dt_iop_module_t *self)
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
-  gtk_entry_set_text(GTK_ENTRY(g->command), p->command);
+  auto i_filter = std::find(g->filter_list.begin(), g->filter_list.end(), p->filter);
+  if(i_filter != g->filter_list.end()) dt_bauhaus_combobox_set(g->gmic_filter, i_filter - g->filter_list.begin());
+  dt_iop_gmic_none_params_t::gui_update(self);
+  dt_iop_gmic_sepia_params_t::gui_update(self);
+  dt_iop_gmic_expert_mode_params_t::gui_update(self);
 }
 
 extern "C" void gui_init(dt_iop_module_t *self)
 {
-  self->gui_data = std::malloc(sizeof(dt_iop_gmic_gui_data_t));
+  self->gui_data = new dt_iop_gmic_gui_data_t;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
-  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-  g->command = gtk_entry_new();
-  gtk_widget_set_tooltip_text(g->command, _("G'MIC script, confirm with enter"));
-  gtk_entry_set_max_length(GTK_ENTRY(g->command), sizeof(p->command) - 1);
-  dt_gui_key_accel_block_on_focus_connect(g->command);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->command), TRUE, TRUE, 0);
-  g_signal_connect(G_OBJECT(g->command), "activate", G_CALLBACK(command_callback), self);
+
+  g->gmic_filter = dt_bauhaus_combobox_new(self);
+  dt_bauhaus_widget_set_label(g->gmic_filter, NULL, _("G'MIC filter"));
+  gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing effect"));
+  gtk_box_pack_start(GTK_BOX(self->widget), g->gmic_filter, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
+
+  dt_iop_gmic_none_params_t::gui_init(self);
+  dt_iop_gmic_sepia_params_t::gui_init(self);
+  dt_iop_gmic_expert_mode_params_t::gui_init(self);
 }
+
 
 extern "C" void gui_cleanup(dt_iop_module_t *self)
 {
-  std::free(self->gui_data);
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  delete g;
   self->gui_data = nullptr;
 }
 
@@ -174,7 +413,10 @@ extern "C" void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   cimg_library::CImg<char>::string("input image").move_to(image_names);
   try
   {
-    gmic(d->command, image_list, image_names);
+    std::string command;
+    if(d->filter == sepia) command = d->parmeters.sepia.gmic_command();
+    if(d->filter == expert_mode) command = d->parmeters.expert_mode.gmic_command();
+    gmic(command.c_str(), image_list, image_names);
   }
   catch(gmic_exception &e)
   {
