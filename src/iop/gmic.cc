@@ -31,6 +31,7 @@ extern "C"
 #include <gtk/gtk.h>
 }
 
+#include "../../../../../../usr/include/c++/7/vector"
 #include <CImg.h>
 #include <algorithm>
 #include <cstddef>
@@ -125,21 +126,41 @@ typedef struct dt_iop_gmic_sepia_gui_data_t
 
 // --- film emulation
 
+struct film_map
+{
+  const std::string effect;
+  const std::string printable;
+
+  film_map(const char *effect_, const char *printable_) : effect(effect_), printable(printable_)
+  {
+  }
+};
+
 struct dt_iop_gmic_film_emulation_params_t
 {
+  char film[128];
   float strength, brightness, contrast, gamma, hue, saturation;
   int normalize_colors;
+  static const std::vector<film_map> film_maps;
 
   dt_iop_gmic_film_emulation_params_t()
-    : strength(1.f), brightness(0.f), contrast(0.f), gamma(0.f), hue(0.f), saturation(0.f), normalize_colors(0)
+    : film("")
+    , strength(1.f)
+    , brightness(0.f)
+    , contrast(0.f)
+    , gamma(0.f)
+    , hue(0.f)
+    , saturation(0.f)
+    , normalize_colors(0)
   {
+    std::snprintf(film, sizeof(film), "%s", film_maps[0].effect.c_str());
   }
 
   std::string gmic_command() const
   {
     std::stringstream str;
     str << "_fx_emulate_film 1,"
-        << "\"fuji_velvia_50\"," << 100 * strength << ',' << 100 * brightness << ',' << 100 * contrast << ','
+        << "\"" << film << "\"," << 100 * strength << ',' << 100 * brightness << ',' << 100 * contrast << ','
         << 100 * gamma << ',' << 100 * hue << ',' << 100 * saturation << ',' << normalize_colors;
     return str.str();
   }
@@ -147,6 +168,8 @@ struct dt_iop_gmic_film_emulation_params_t
   static void gui_update(struct dt_iop_module_t *self);
 
   static void gui_init(dt_iop_module_t *self);
+
+  static void film_callback(GtkWidget *w, dt_iop_module_t *self);
 
   static void strength_callback(GtkWidget *w, dt_iop_module_t *self);
 
@@ -163,10 +186,378 @@ struct dt_iop_gmic_film_emulation_params_t
   static void normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
+const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
+  { "agfa_apx_100", _("Agfa APX 100") },
+  { "agfa_apx_25", _("Agfa APX 25") },
+  { "fuji_neopan_1600_-", _("Fuji Neopan 1600 -") },
+  { "fuji_neopan_1600", _("Fuji Neopan 1600") },
+  { "fuji_neopan_1600_+", _("Fuji Neopan 1600 +") },
+  { "fuji_neopan_1600_++", _("Fuji Neopan 1600 ++") },
+  { "fuji_ilford_delta_3200", _("Fuji Ilford Delta 3200") },
+  { "fuji_ilford_delta_3200_+", _("Fuji Ilford Delta 3200 +") },
+  { "fuji_ilford_delta_3200_++", _("Fuji Ilford Delta 3200 ++") },
+  { "fuji_ilford_delta_3200_-", _("Fuji Ilford Delta 3200 -") },
+  { "fuji_neopan_acros_100", _("Fuji Neopan Acros 100") },
+  { "ilford_delta_100", _("Ilford Delta 100") },
+  { "ilford_delta_3200", _("Ilford Delta 3200") },
+  { "ilford_delta_400", _("Ilford Delta 400") },
+  { "ilford_fp4_plus_125", _("Ilford FP4 plus 125") },
+  { "ilford_hp5_plus_400", _("Ilford HP5 plus 400") },
+  { "ilford_hps_800", _("Ilford HPS 800") },
+  { "ilford_pan_f_plus_50", _("Ilford Pan F plus 50") },
+  { "ilford_xp2", _("Ilford XP2") },
+  { "kodak_bw_400_cn", _("Kodak bw 400 CN") },
+  { "kodak_hie_(hs_infra)", _("Kodak hie (hs infra)") },
+  { "kodak_t-max_100", _("Kodak T-Max 100") },
+  { "kodak_t-max_3200", _("Kodak T-Max 3200") },
+  { "kodak_t-max_400", _("Kodak T-Max 400") },
+  { "polaroid_664", _("Polaroid 664") },
+  { "polaroid_667", _("Polaroid 667") },
+  { "polaroid_672", _("Polaroid 672") },
+  { "rollei_ir_400", _("Rollei IR 400") },
+  { "rollei_ortho_25", _("Rollei Ortho 25") },
+  { "rollei_retro_100_tonal", _("Rollei Retro 100 tonal") },
+  { "rollei_retro_80s", _("Rollei Retro 80s") },
+  { "fuji_xtrans_ii_astia_v2", _("Fuji X-Trans II Astia") },
+  { "fuji_xtrans_ii_classic_chrome_v1", _("Fuji X-Trans II classic chrome") },
+  { "fuji_xtrans_ii_pro_neg_hi_v2", _("Fuji X-Trans II pro neg hi") },
+  { "fuji_xtrans_ii_pro_neg_std_v2", _("Fuji X-Trans II pro neg std") },
+  { "fuji_xtrans_ii_provia_v2", _("Fuji X-Trans II Provia") },
+  { "fuji_xtrans_ii_velvia_v2", _("Fuji X-Trans II Velvia") },
+  { "polaroid_px-100uv+_cold_--", _("Polaroid PX-100uv+ cold --") },
+  { "polaroid_px-100uv+_cold_-", _("Polaroid PX-100uv+ cold -") },
+  { "polaroid_px-100uv+_cold", _("Polaroid PX-100uv+ cold") },
+  { "polaroid_px-100uv+_cold_+", _("Polaroid PX-100uv+ cold +") },
+  { "polaroid_px-100uv+_cold_++", _("Polaroid PX-100uv+ cold ++") },
+  { "polaroid_px-100uv+_cold_+++", _("Polaroid PX-100uv+ cold +++") },
+  { "polaroid_px-100uv+_warm_--", _("Polaroid PX-100uv+ warm --") },
+  { "polaroid_px-100uv+_warm_-", _("Polaroid PX-100uv+ warm -") },
+  { "polaroid_px-100uv+_warm", _("Polaroid PX-100uv+ warm") },
+  { "polaroid_px-100uv+_warm_+", _("Polaroid PX-100uv+ warm +") },
+  { "polaroid_px-100uv+_warm_++", _("Polaroid PX-100uv+ warm ++") },
+  { "polaroid_px-100uv+_warm_+++", _("Polaroid PX-100uv+ warm +++") },
+  { "polaroid_px-680_--", _("Polaroid PX-680 --") },
+  { "polaroid_px-680_-", _("Polaroid PX-680 -") },
+  { "polaroid_px-680", _("Polaroid PX-680") },
+  { "polaroid_px-680_+", _("Polaroid PX-680 +") },
+  { "polaroid_px-680_++", _("Polaroid PX-680 ++") },
+  { "polaroid_px-680_cold_--", _("Polaroid PX-680 cold --") },
+  { "polaroid_px-680_cold_-", _("Polaroid PX-680 cold -") },
+  { "polaroid_px-680_cold", _("Polaroid PX-680 cold") },
+  { "polaroid_px-680_cold_+", _("Polaroid PX-680 cold +") },
+  { "polaroid_px-680_cold_++", _("Polaroid PX-680 cold ++") },
+  { "polaroid_px-680_cold_++_alt", _("Polaroid PX-680 cold ++ alt") },
+  { "polaroid_px-680_warm_--", _("Polaroid PX-680 warm --") },
+  { "polaroid_px-680_warm_-", _("Polaroid PX-680 warm -") },
+  { "polaroid_px-680_warm", _("Polaroid PX-680 warm") },
+  { "polaroid_px-680_warm_+", _("Polaroid PX-680 warm +") },
+  { "polaroid_px-680_warm_++", _("Polaroid PX-680 warm ++") },
+  { "polaroid_px-70_--", _("Polaroid PX-70 --") },
+  { "polaroid_px-70_-", _("Polaroid PX-70 -") },
+  { "polaroid_px-70", _("Polaroid PX-70") },
+  { "polaroid_px-70_+", _("Polaroid PX-70 +") },
+  { "polaroid_px-70_++", _("Polaroid PX-70 ++") },
+  { "polaroid_px-70_+++", _("Polaroid PX-70 +++") },
+  { "polaroid_px-70_cold", _("Polaroid PX-70 cold") },
+  { "polaroid_px-70_cold_--", _("Polaroid PX-70 cold --") },
+  { "polaroid_px-70_cold_-", _("Polaroid PX-70 cold -") },
+  { "polaroid_px-70_cold_+", _("Polaroid PX-70 cold +") },
+  { "polaroid_px-70_cold_++", _("Polaroid PX-70 cold ++") },
+  { "polaroid_px-70_warm_--", _("Polaroid PX-70 warm --") },
+  { "polaroid_px-70_warm_-", _("Polaroid PX-70 warm -") },
+  { "polaroid_px-70_warm", _("Polaroid PX-70 warm") },
+  { "polaroid_px-70_warm_+", _("Polaroid PX-70 warm +") },
+  { "polaroid_px-70_warm_++", _("Polaroid PX-70 warm ++") },
+  { "polaroid_time_zero_(expired)_---", _("Polaroid time zero (expired) ---") },
+  { "polaroid_time_zero_(expired)_--", _("Polaroid time zero (expired) --") },
+  { "polaroid_time_zero_(expired)_-", _("Polaroid time zero (expired) -") },
+  { "polaroid_time_zero_(expired)", _("Polaroid time zero (expired)") },
+  { "polaroid_time_zero_(expired)_+", _("Polaroid time zero (expired) +") },
+  { "polaroid_time_zero_(expired)_++", _("Polaroid time zero (expired) ++") },
+  { "polaroid_time_zero_(expired)_cold_---", _("Polaroid time zero (expired) cold ---") },
+  { "polaroid_time_zero_(expired)_cold_--", _("Polaroid time zero (expired) cold --") },
+  { "polaroid_time_zero_(expired)_cold_-", _("Polaroid time zero (expired) cold -") },
+  { "polaroid_time_zero_(expired)_cold", _("Polaroid time zero (expired) cold") },
+  { "fuji_fp-100c", _("Fuji FP-100c") },
+  { "fuji_fp-100c_+", _("Fuji FP-100c +") },
+  { "fuji_fp-100c_++", _("Fuji FP-100c ++") },
+  { "fuji_fp-100c_+++", _("Fuji FP-100c +++") },
+  { "fuji_fp-100c_++_alt", _("Fuji FP-100c ++ alt") },
+  { "fuji_fp-100c_-", _("Fuji FP-100c -") },
+  { "fuji_fp-100c_--", _("Fuji FP-100c --") },
+  { "fuji_fp-100c_cool", _("Fuji FP-100c cool") },
+  { "fuji_fp-100c_cool_+", _("Fuji FP-100c cool +") },
+  { "fuji_fp-100c_cool_++", _("Fuji FP-100c cool ++") },
+  { "fuji_fp-100c_cool_-", _("Fuji FP-100c cool -") },
+  { "fuji_fp-100c_cool_--", _("Fuji FP-100c cool --") },
+  { "fuji_fp-100c_negative", _("Fuji FP-100c negative") },
+  { "fuji_fp-100c_negative_+", _("Fuji FP-100c negative +") },
+  { "fuji_fp-100c_negative_++", _("Fuji FP-100c negative ++") },
+  { "fuji_fp-100c_negative_+++", _("Fuji FP-100c negative +++") },
+  { "fuji_fp-100c_negative_++_alt", _("Fuji FP-100c negative ++ alt") },
+  { "fuji_fp-100c_negative_-", _("Fuji FP-100c negative -") },
+  { "fuji_fp-100c_negative_--", _("Fuji FP-100c negative --") },
+  { "fuji_fp-3000b", _("Fuji FP-3000b") },
+  { "fuji_fp-3000b_+", _("Fuji FP-3000b +") },
+  { "fuji_fp-3000b_++", _("Fuji FP-3000b ++") },
+  { "fuji_fp-3000b_+++", _("Fuji FP-3000b +++") },
+  { "fuji_fp-3000b_-", _("Fuji FP-3000b -") },
+  { "fuji_fp-3000b_--", _("Fuji FP-3000b --") },
+  { "fuji_fp-3000b_hc", _("Fuji FP-3000b hc") },
+  { "fuji_fp-3000b_negative", _("Fuji FP-3000b negative") },
+  { "fuji_fp-3000b_negative_+", _("Fuji FP-3000b negative +") },
+  { "fuji_fp-3000b_negative_++", _("Fuji FP-3000b negative ++") },
+  { "fuji_fp-3000b_negative_+++", _("Fuji FP-3000b negative +++") },
+  { "fuji_fp-3000b_negative_-", _("Fuji FP-3000b negative -") },
+  { "fuji_fp-3000b_negative_--", _("Fuji FP-3000b negative --") },
+  { "fuji_fp-3000b_negative_early", _("Fuji FP-3000b negative early") },
+  { "polaroid_665", _("Polaroid 665") },
+  { "polaroid_665_+", _("Polaroid 665 +") },
+  { "polaroid_665_++", _("Polaroid 665 ++") },
+  { "polaroid_665_-", _("Polaroid 665 -") },
+  { "polaroid_665_--", _("Polaroid 665 --") },
+  { "polaroid_665_negative", _("Polaroid 665 negative") },
+  { "polaroid_665_negative_+", _("Polaroid 665 negative +") },
+  { "polaroid_665_negative_-", _("Polaroid 665 negative -") },
+  { "polaroid_665_negative_hc", _("Polaroid 665 negative hc") },
+  { "polaroid_669", _("Polaroid 669") },
+  { "polaroid_669_+", _("Polaroid 669 +") },
+  { "polaroid_669_++", _("Polaroid 669 ++") },
+  { "polaroid_669_+++", _("Polaroid 669 +++") },
+  { "polaroid_669_-", _("Polaroid 669 -") },
+  { "polaroid_669_--", _("Polaroid 669 --") },
+  { "polaroid_669_cold", _("Polaroid 669 cold") },
+  { "polaroid_669_cold_+", _("Polaroid 669 cold +") },
+  { "polaroid_669_cold_-", _("Polaroid 669 cold -") },
+  { "polaroid_669_cold_--", _("Polaroid 669 cold --") },
+  { "polaroid_690", _("Polaroid 690") },
+  { "polaroid_690_+", _("Polaroid 690 +") },
+  { "polaroid_690_++", _("Polaroid 690 ++") },
+  { "polaroid_690_-", _("Polaroid 690 -") },
+  { "polaroid_690_--", _("Polaroid 690 --") },
+  { "polaroid_690_cold", _("Polaroid 690 cold") },
+  { "polaroid_690_cold_+", _("Polaroid 690 cold +") },
+  { "polaroid_690_cold_++", _("Polaroid 690 cold ++") },
+  { "polaroid_690_cold_-", _("Polaroid 690 cold -") },
+  { "polaroid_690_cold_--", _("Polaroid 690 cold --") },
+  { "polaroid_690_warm", _("Polaroid 690 warm") },
+  { "polaroid_690_warm_+", _("Polaroid 690 warm +") },
+  { "polaroid_690_warm_++", _("Polaroid 690 warm ++") },
+  { "polaroid_690_warm_-", _("Polaroid 690 warm -") },
+  { "polaroid_690_warm_--", _("Polaroid 690 warm --") },
+  { "agfa_ultra_color_100", _("Agfa Ultra color 100") },
+  { "agfa_vista_200", _("Agfa Vista 200") },
+  { "fuji_superia_200", _("Fuji superia 200") },
+  { "fuji_superia_hg_1600", _("Fuji superia hg 1600") },
+  { "fuji_superia_reala_100", _("Fuji superia reala 100") },
+  { "fuji_superia_x-tra_800", _("Fuji superia x-tra 800") },
+  { "kodak_elite_100_xpro", _("Kodak Elite 100 xpro") },
+  { "kodak_elite_color_200", _("Kodak Elite color 200") },
+  { "kodak_elite_color_400", _("Kodak Elite color 400") },
+  { "kodak_portra_160_nc", _("Kodak Portra 160 nc") },
+  { "kodak_portra_160_nc_+", _("Kodak Portra 160 nc +") },
+  { "kodak_portra_160_nc_++", _("Kodak Portra 160 nc ++") },
+  { "kodak_portra_160_nc_-", _("Kodak Portra 160 nc -") },
+  { "kodak_portra_160_vc", _("Kodak Portra 160 vc") },
+  { "kodak_portra_160_vc_+", _("Kodak Portra 160 vc +") },
+  { "kodak_portra_160_vc_++", _("Kodak Portra 160 vc ++") },
+  { "kodak_portra_160_vc_-", _("Kodak Portra 160 vc -") },
+  { "lomography_redscale_100", _("Lomography redscale 100") },
+  { "fuji_160c", _("Fuji 160c") },
+  { "fuji_160c_+", _("Fuji 160c +") },
+  { "fuji_160c_++", _("Fuji 160c ++") },
+  { "fuji_160c_-", _("Fuji 160c -") },
+  { "fuji_400h", _("Fuji 400h") },
+  { "fuji_400h_+", _("Fuji 400h +") },
+  { "fuji_400h_++", _("Fuji 400h ++") },
+  { "fuji_400h_-", _("Fuji 400h -") },
+  { "fuji_800z", _("Fuji 800z") },
+  { "fuji_800z_+", _("Fuji 800z +") },
+  { "fuji_800z_++", _("Fuji 800z ++") },
+  { "fuji_800z_-", _("Fuji 800z -") },
+  { "fuji_ilford_hp5", _("Fuji Ilford HP5") },
+  { "fuji_ilford_hp5_+", _("Fuji Ilford HP5 +") },
+  { "fuji_ilford_hp5_++", _("Fuji Ilford HP5 ++") },
+  { "fuji_ilford_hp5_-", _("Fuji Ilford HP5 -") },
+  { "kodak_portra_160", _("Kodak Portra 160") },
+  { "kodak_portra_160_+", _("Kodak Portra 160 +") },
+  { "kodak_portra_160_++", _("Kodak Portra 160 ++") },
+  { "kodak_portra_160_-", _("Kodak Portra 160 -") },
+  { "kodak_portra_400", _("Kodak Portra 400") },
+  { "kodak_portra_400_+", _("Kodak Portra 400 +") },
+  { "kodak_portra_400_++", _("Kodak Portra 400 ++") },
+  { "kodak_portra_400_-", _("Kodak Portra 400 -") },
+  { "kodak_portra_400_nc", _("Kodak Portra 400 nc") },
+  { "kodak_portra_400_nc_+", _("Kodak Portra 400 nc +") },
+  { "kodak_portra_400_nc_++", _("Kodak Portra 400 nc ++") },
+  { "kodak_portra_400_nc_-", _("Kodak Portra 400 nc -") },
+  { "kodak_portra_400_uc", _("Kodak Portra 400 uc") },
+  { "kodak_portra_400_uc_+", _("Kodak Portra 400 uc +") },
+  { "kodak_portra_400_uc_++", _("Kodak Portra 400 uc ++") },
+  { "kodak_portra_400_uc_-", _("Kodak Portra 400 uc -") },
+  { "kodak_portra_400_vc", _("Kodak Portra 400 vc") },
+  { "kodak_portra_400_vc_+", _("Kodak Portra 400 vc +") },
+  { "kodak_portra_400_vc_++", _("Kodak Portra 400 vc ++") },
+  { "kodak_portra_400_vc_-", _("Kodak Portra 400 vc -") },
+  { "kodak_portra_800", _("Kodak Portra 800") },
+  { "kodak_portra_800_+", _("Kodak Portra 800 +") },
+  { "kodak_portra_800_++", _("Kodak Portra 800 ++") },
+  { "kodak_portra_800_-", _("Kodak Portra 800 -") },
+  { "kodak_tmax_3200_-", _("Kodak T-Max 3200 -") },
+  { "kodak_tmax_3200", _("Kodak T-Max 3200") },
+  { "kodak_tmax_3200_+", _("Kodak T-Max 3200 +") },
+  { "kodak_tmax_3200_++", _("Kodak T-Max 3200 ++") },
+  { "kodak_tri-x_400_-", _("Kodak Tri-X 400 -") },
+  { "kodak_tri-x_400", _("Kodak Tri-X 400") },
+  { "kodak_tri-x_400_+", _("Kodak Tri-X 400 +") },
+  { "kodak_tri-x_400_++", _("Kodak Tri-X 400 ++") },
+
+  { "agfa_precisa_100", _("Agfa Precisa 100") },
+  { "fuji_astia_100f", _("Fuji Astia 100f") },
+
+  { "fuji_fp_100c", _("Fuji FP-100c") },
+  { "fuji_provia_100f", _("Fuji provia 100f") },
+  { "fuji_provia_400f", _("Fuji provia 400f") },
+  { "fuji_provia_400x", _("Fuji provia 400x") },
+  { "fuji_sensia_100", _("Fuji sensia 100") },
+  { "fuji_superia_100", _("Fuji superia 100") },
+  { "fuji_superia_100_+", _("Fuji superia 100 +") },
+  { "fuji_superia_100_++", _("Fuji superia 100 ++") },
+  { "fuji_superia_100_-", _("Fuji superia 100 -") },
+  { "fuji_superia_1600", _("Fuji superia 1600") },
+  { "fuji_superia_1600_+", _("Fuji superia 1600 +") },
+  { "fuji_superia_1600_++", _("Fuji superia 1600 ++") },
+  { "fuji_superia_1600_-", _("Fuji superia 1600 -") },
+  { "fuji_superia_200_xpro", _("Fuji superia 200 xpro") },
+  { "fuji_superia_400", _("Fuji superia 400") },
+  { "fuji_superia_400_+", _("Fuji superia 400 +") },
+  { "fuji_superia_400_++", _("Fuji superia 400 ++") },
+  { "fuji_superia_400_-", _("Fuji superia 400 -") },
+  { "fuji_superia_800", _("Fuji superia 800") },
+  { "fuji_superia_800_+", _("Fuji superia 800 +") },
+  { "fuji_superia_800_++", _("Fuji superia 800 ++") },
+  { "fuji_superia_800_-", _("Fuji superia 800 -") },
+  { "fuji_velvia_50", _("Fuji velvia 50") },
+  { "generic_fuji_astia_100", _("generic Fuji astia 100") },
+  { "generic_fuji_provia_100", _("generic Fuji provia 100") },
+  { "generic_fuji_velvia_100", _("generic Fuji velvia 100") },
+  { "generic_kodachrome_64", _("generic Kodachrome 64") },
+  { "generic_kodak_ektachrome_100_vs", _("generic Kodak Ektachrome 100 vs") },
+  { "kodak_e-100_gx_ektachrome_100", _("Kodak E-100 GX Ektachrome 100") },
+  { "kodak_ektachrome_100_vs", _("Kodak Ektachrome 100 vs") },
+  { "kodak_elite_chrome_200", _("Kodak Elite chrome 200") },
+  { "kodak_elite_chrome_400", _("Kodak Elite chrome 400") },
+  { "kodak_elite_extracolor_100", _("Kodak Elite extracolor 100") },
+  { "kodak_kodachrome_200", _("Kodak Kodachrome 200") },
+  { "kodak_kodachrome_25", _("Kodak Kodachrome 25") },
+  { "kodak_kodachrome_64", _("Kodak Kodachrome 64") },
+  { "lomography_x-pro_slide_200", _("Lomography x-pro slide 200") },
+  { "polaroid_polachrome", _("Polaroid Polachrome") },
+
+  { "fuji3510_constlclip", _("Fuji 3510 constlclip") },
+  { "fuji3510_constlmap", _("Fuji 3510 constlmap") },
+  { "fuji3510_cuspclip", _("Fuji 3510 cuspclip") },
+  { "fuji3513_constlclip", _("Fuji 3513 constlclip") },
+  { "fuji3513_constlmap", _("Fuji 3513 constlmap") },
+  { "fuji3513_cuspclip", _("Fuji 3513 cuspclip") },
+  { "kodak2383_constlclip", _("Kodak 2383 constlclip") },
+  { "kodak2383_constlmap", _("Kodak 2383 constlmap") },
+  { "kodak2383_cuspclip", _("Kodak 2383 cuspclip") },
+  { "kodak2393_constlclip", _("Kodak 2393 constlclip") },
+  { "kodak2393_constlmap", _("Kodak 2393 constlmap") },
+  { "kodak2393_cuspclip", _("Kodak 2393 cuspclip") },
+
+  { "analogfx_anno_1870_color", _("AnalogFX anno 1870 color") },
+  { "analogfx_old_style_i", _("AnalogFX old style I") },
+  { "analogfx_old_style_ii", _("AnalogFX old style II") },
+  { "analogfx_old_style_iii", _("AnalogFX old style III") },
+  { "analogfx_sepia_color", _("AnalogFX sepia color") },
+  { "analogfx_soft_sepia_i", _("AnalogFX soft sepia I") },
+  { "analogfx_soft_sepia_ii", _("AnalogFX soft sepia II") },
+  { "goldfx_bright_spring_breeze", _("GoldFX bright spring breeze") },
+  { "goldfx_bright_summer_heat", _("GoldFX bright summer heat") },
+  { "goldfx_hot_summer_heat", _("GoldFX hot summer heat") },
+  { "goldfx_perfect_sunset_01min", _("GoldFX perfect sunset 01min") },
+  { "goldfx_perfect_sunset_05min", _("GoldFX perfect sunset 05min") },
+  { "goldfx_perfect_sunset_10min", _("GoldFX perfect sunset 10min") },
+  { "goldfx_spring_breeze", _("GoldFX spring breeze") },
+  { "goldfx_summer_heat", _("GoldFX summer heat") },
+  { "technicalfx_backlight_filter", _("TechnicalFX backlight filter") },
+  { "zilverfx_b_w_solarization", _("ZiverFX bw solarization") },
+  { "zilverfx_infrared", _("ZiverFX infrared") },
+  { "zilverfx_vintage_b_w", _("ZiverFX vintage bw") },
+
+  { "60's", _("60's") },
+  { "60's_faded", _("60's faded") },
+  { "60's_faded_alt", _("60's faded alt") },
+  { "alien_green", _("alien green") },
+  { "black_and_white", _("black and white") },
+  { "bleach_bypass", _("bleach bypass") },
+  { "blue_mono", _("blue mono") },
+  { "color_rich", _("color rich") },
+  { "faded", _("faded") },
+  { "faded_alt", _("faded alt") },
+  { "faded_analog", _("faded analog") },
+  { "faded_extreme", _("faded extreme") },
+  { "faded_vivid", _("faded vivid") },
+  { "expired_fade", _("expired fade") },
+  { "expired_polaroid", _("expired Polaroid") },
+  { "extreme", _("extreme") },
+  { "fade", _("fade") },
+  { "faux_infrared", _("faux infrared") },
+  { "golden", _("golden") },
+  { "golden_bright", _("golden bright") },
+  { "golden_fade", _("golden fade") },
+  { "golden_mono", _("golden mono") },
+  { "golden_vibrant", _("golden vibrant") },
+  { "green_mono", _("green mono") },
+  { "hong_kong", _("hong kong") },
+  { "light_blown", _("light blown") },
+  { "lomo", _("lomo") },
+  { "mono_tinted", _("mono tinted") },
+  { "muted_fade", _("muted fade") },
+  { "mute_shift", _("mute shift") },
+  { "natural_vivid", _("natural vivid") },
+  { "nostalgic", _("nostalgic") },
+  { "orange_tone", _("orange tone") },
+  { "pink_fade", _("pink fade") },
+  { "purple", _("purple") },
+  { "retro", _("retro") },
+  { "rotate_muted", _("rotate muted") },
+  { "rotate_vibrant", _("rotate vibrant") },
+  { "rotated", _("rotated") },
+  { "rotated_crush", _("rotated crush") },
+  { "smooth_cromeish", _("smooth cromeish") },
+  { "smooth_fade", _("smooth fade") },
+  { "soft_fade", _("soft fade") },
+  { "solarized_color", _("solarized color") },
+  { "solarized_color2", _("solarized color2") },
+  { "summer", _("summer") },
+  { "summer_alt", _("summer alt") },
+  { "sunny", _("sunny") },
+  { "sunny_alt", _("sunny alt") },
+  { "sunny_rich", _("sunny rich") },
+  { "sunny_warm", _("sunny warm") },
+  { "super_warm", _("super warm") },
+  { "super_warm_rich", _("super warm rich") },
+  { "sutro_fx", _("Sutro FX") },
+  { "vibrant", _("vibrant") },
+  { "vibrant_alien", _("vibrant alien") },
+  { "vibrant_contrast", _("vibrant contrast") },
+  { "vibrant_cromeish", _("vibrant cromeish") },
+  { "vintage", _("vintage") },
+  { "vintage_alt", _("vintage alt") },
+  { "vintage_brighter", _("vintage brighter") },
+  { "warm", _("warm") },
+  { "warm_highlight", _("warm highlight") },
+  { "warm_yellow", _("warm yellow") }
+};
+
 typedef struct dt_iop_gmic_film_emulation_gui_data_t
 {
   GtkWidget *box;
-  GtkWidget *strength, *brightness, *contrast, *gamma, *hue, *saturation, *normalize_colors;
+  GtkWidget *film, *strength, *brightness, *contrast, *gamma, *hue, *saturation, *normalize_colors;
+  std::vector<std::string> film_list;
 } dt_iop_gmic_film_emulation_gui_data_t;
 
 //----------------------------------------------------------------------
@@ -329,7 +720,7 @@ void dt_iop_gmic_expert_mode_params_t::command_callback(GtkWidget *w, dt_iop_mod
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   std::snprintf(p->parameters.expert_mode.command, sizeof(p->parameters.expert_mode.command), "%s",
                 gtk_entry_get_text(GTK_ENTRY(w)));
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 // --- sepia
@@ -384,7 +775,7 @@ void dt_iop_gmic_sepia_params_t::brightness_callback(GtkWidget *w, dt_iop_module
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.sepia.brightness = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_sepia_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -392,7 +783,7 @@ void dt_iop_gmic_sepia_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.sepia.contrast = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_sepia_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -400,7 +791,7 @@ void dt_iop_gmic_sepia_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *s
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.sepia.gamma = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 // --- film emulation
@@ -410,6 +801,9 @@ void dt_iop_gmic_film_emulation_params_t::gui_update(struct dt_iop_module_t *sel
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   gtk_widget_set_visible(g->film_emulation.box, p->filter == film_emulation ? TRUE : FALSE);
+  auto i = std::find(g->film_emulation.film_list.begin(), g->film_emulation.film_list.end(),
+                     p->parameters.film_emulation.film);
+  dt_bauhaus_combobox_set(g->film_emulation.film, static_cast<int>(i - g->film_emulation.film_list.begin()));
   dt_bauhaus_slider_set(g->film_emulation.strength, p->parameters.film_emulation.strength);
   dt_bauhaus_slider_set(g->film_emulation.brightness, p->parameters.film_emulation.brightness);
   dt_bauhaus_slider_set(g->film_emulation.contrast, p->parameters.film_emulation.contrast);
@@ -426,6 +820,18 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->gmic_filter, _("film emulation"));
   g->film_emulation.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   gtk_box_pack_start(GTK_BOX(self->widget), g->film_emulation.box, TRUE, TRUE, 0);
+
+  g->film_emulation.film = dt_bauhaus_combobox_new(self);
+  for(const auto &film : film_maps)
+  {
+    dt_bauhaus_combobox_add(g->film_emulation.film, film.printable.c_str());
+    g->film_emulation.film_list.push_back(film.effect);
+  }
+  dt_bauhaus_widget_set_label(g->film_emulation.film, NULL, _("film type"));
+  gtk_widget_set_tooltip_text(g->film_emulation.film, _("choose emulated film type"));
+  gtk_box_pack_start(GTK_BOX(g->film_emulation.box), g->film_emulation.film, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->film_emulation.film), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::film_callback), self);
 
   g->film_emulation.strength
       = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, p->parameters.film_emulation.strength, 3);
@@ -491,12 +897,21 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->filter_list.push_back(film_emulation);
 }
 
+void dt_iop_gmic_film_emulation_params_t::film_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  std::snprintf(p->parameters.film_emulation.film, sizeof(p->parameters.film_emulation.film), "%s",
+                film_maps[dt_bauhaus_combobox_get(w)].effect.c_str());
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
 void dt_iop_gmic_film_emulation_params_t::strength_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.strength = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -504,7 +919,7 @@ void dt_iop_gmic_film_emulation_params_t::brightness_callback(GtkWidget *w, dt_i
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.brightness = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -512,7 +927,7 @@ void dt_iop_gmic_film_emulation_params_t::contrast_callback(GtkWidget *w, dt_iop
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.contrast = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -520,7 +935,7 @@ void dt_iop_gmic_film_emulation_params_t::gamma_callback(GtkWidget *w, dt_iop_mo
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.gamma = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::hue_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -528,7 +943,7 @@ void dt_iop_gmic_film_emulation_params_t::hue_callback(GtkWidget *w, dt_iop_modu
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.hue = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::saturation_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -536,7 +951,7 @@ void dt_iop_gmic_film_emulation_params_t::saturation_callback(GtkWidget *w, dt_i
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.saturation = dt_bauhaus_slider_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void dt_iop_gmic_film_emulation_params_t::normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self)
@@ -544,7 +959,7 @@ void dt_iop_gmic_film_emulation_params_t::normalize_colors_callback(GtkWidget *w
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   p->parameters.film_emulation.normalize_colors = dt_bauhaus_combobox_get(w);
-  dt_dev_add_history_item(darktable.develop, self, FALSE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 
@@ -573,9 +988,9 @@ extern "C" void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
 
   dt_iop_gmic_none_params_t::gui_init(self);
-  dt_iop_gmic_expert_mode_params_t::gui_init(self);
   dt_iop_gmic_sepia_params_t::gui_init(self);
   dt_iop_gmic_film_emulation_params_t::gui_init(self);
+  dt_iop_gmic_expert_mode_params_t::gui_init(self);
 }
 
 
