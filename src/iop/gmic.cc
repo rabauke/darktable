@@ -129,10 +129,10 @@ typedef struct dt_iop_gmic_sepia_gui_data_t
 
 struct film_map
 {
-  const std::string effect;
+  const std::string film_type;
   const std::string printable;
 
-  film_map(const char *effect_, const char *printable_) : effect(effect_), printable(printable_)
+  film_map(const char *film_type_, const char *printable_) : film_type(film_type_), printable(printable_)
   {
   }
 };
@@ -154,7 +154,7 @@ struct dt_iop_gmic_film_emulation_params_t
     , saturation(0.f)
     , normalize_colors(0)
   {
-    std::snprintf(film, sizeof(film), "%s", film_maps[0].effect.c_str());
+    std::snprintf(film, sizeof(film), "%s", film_maps[0].film_type.c_str());
   }
 
   std::string gmic_command() const
@@ -769,21 +769,21 @@ void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self)
 
   g->sepia.brightness = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.sepia.brightness, 3);
   dt_bauhaus_widget_set_label(g->sepia.brightness, NULL, _("brightness"));
-  gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia effect"));
+  gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.brightness), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.brightness), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::brightness_callback), self);
 
   g->sepia.contrast = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.sepia.contrast, 3);
   dt_bauhaus_widget_set_label(g->sepia.contrast, NULL, _("contrast"));
-  gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia effect"));
+  gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.contrast), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.contrast), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::contrast_callback), self);
 
   g->sepia.gamma = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.sepia.gamma, 3);
   dt_bauhaus_widget_set_label(g->sepia.gamma, NULL, _("gamma"));
-  gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia effect"));
+  gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.gamma), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.gamma), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::gamma_callback), self);
@@ -849,7 +849,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   for(const auto &film : film_maps)
   {
     dt_bauhaus_combobox_add_aligned(g->film_emulation.film, film.printable.c_str(), DT_BAUHAUS_COMBOBOX_ALIGN_LEFT);
-    g->film_emulation.film_list.push_back(film.effect);
+    g->film_emulation.film_list.push_back(film.film_type);
   }
   dt_bauhaus_widget_set_label(g->film_emulation.film, NULL, _("film type"));
   gtk_widget_set_tooltip_text(g->film_emulation.film, _("choose emulated film type"));
@@ -860,7 +860,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->film_emulation.strength
       = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, p->parameters.film_emulation.strength, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.strength, NULL, _("strength"));
-  gtk_widget_set_tooltip_text(g->film_emulation.strength, _("strength of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.strength, _("strength of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.strength), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.strength), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::strength_callback), self);
@@ -868,7 +868,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->film_emulation.brightness
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.film_emulation.brightness, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.brightness, NULL, _("brightness"));
-  gtk_widget_set_tooltip_text(g->film_emulation.brightness, _("brightness of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.brightness, _("brightness of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.brightness), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.brightness), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::brightness_callback), self);
@@ -876,7 +876,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->film_emulation.contrast
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.film_emulation.contrast, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.contrast, NULL, _("contrast"));
-  gtk_widget_set_tooltip_text(g->film_emulation.contrast, _("contrast of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.contrast, _("contrast of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.contrast), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.contrast), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::contrast_callback), self);
@@ -884,14 +884,14 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->film_emulation.gamma
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.film_emulation.gamma, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.gamma, NULL, _("gamma"));
-  gtk_widget_set_tooltip_text(g->film_emulation.gamma, _("gamma value of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.gamma, _("gamma value of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.gamma), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.gamma), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::gamma_callback), self);
 
   g->film_emulation.hue = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.film_emulation.hue, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.hue, NULL, _("hue"));
-  gtk_widget_set_tooltip_text(g->film_emulation.hue, _("hue-shift of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.hue, _("hue-shift of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.hue), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.hue), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::hue_callback), self);
@@ -899,7 +899,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   g->film_emulation.saturation
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, p->parameters.film_emulation.saturation, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.saturation, NULL, _("saturation"));
-  gtk_widget_set_tooltip_text(g->film_emulation.saturation, _("saturation of the film emulation effect"));
+  gtk_widget_set_tooltip_text(g->film_emulation.saturation, _("saturation of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.saturation), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.saturation), "value-changed",
                    G_CALLBACK(dt_iop_gmic_film_emulation_params_t::saturation_callback), self);
@@ -926,7 +926,7 @@ void dt_iop_gmic_film_emulation_params_t::film_callback(GtkWidget *w, dt_iop_mod
   if(self->dt->gui->reset) return;
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   std::snprintf(p->parameters.film_emulation.film, sizeof(p->parameters.film_emulation.film), "%s",
-                film_maps[dt_bauhaus_combobox_get(w)].effect.c_str());
+                film_maps[dt_bauhaus_combobox_get(w)].film_type.c_str());
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -1007,7 +1007,7 @@ extern "C" void gui_init(dt_iop_module_t *self)
 
   g->gmic_filter = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->gmic_filter, NULL, _("G'MIC filter"));
-  gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing effect"));
+  gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing film_type"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->gmic_filter, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
 
