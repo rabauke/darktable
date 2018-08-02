@@ -31,8 +31,6 @@ extern "C"
 #include <gtk/gtk.h>
 }
 
-#include "../../../../../../usr/include/c++/7/vector"
-#include "../bauhaus/bauhaus.h"
 #include <CImg.h>
 #include <algorithm>
 #include <cstddef>
@@ -63,6 +61,10 @@ struct dt_iop_gmic_none_params_t
   static void command_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
+struct dt_iop_gmic_none_gui_data_t
+{
+};
+
 // --- expert mode
 
 struct dt_iop_gmic_expert_mode_params_t
@@ -85,11 +87,11 @@ struct dt_iop_gmic_expert_mode_params_t
   static void command_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
-typedef struct dt_iop_gmic_expert_mode_gui_data_t
+struct dt_iop_gmic_expert_mode_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *command;
-} dt_iop_gmic_expert_mode_gui_data_t;
+};
 
 // --- sepia
 
@@ -119,11 +121,11 @@ struct dt_iop_gmic_sepia_params_t
   static void gamma_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
-typedef struct dt_iop_gmic_sepia_gui_data_t
+struct dt_iop_gmic_sepia_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *brightness, *contrast, *gamma;
-} dt_iop_gmic_sepia_gui_data_t;
+};
 
 // --- film emulation
 
@@ -262,9 +264,9 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "polaroid_px-70_+", _("Polaroid PX-70 +") },
   { "polaroid_px-70_++", _("Polaroid PX-70 ++") },
   { "polaroid_px-70_+++", _("Polaroid PX-70 +++") },
-  { "polaroid_px-70_cold", _("Polaroid PX-70 cold") },
   { "polaroid_px-70_cold_--", _("Polaroid PX-70 cold --") },
   { "polaroid_px-70_cold_-", _("Polaroid PX-70 cold -") },
+  { "polaroid_px-70_cold", _("Polaroid PX-70 cold") },
   { "polaroid_px-70_cold_+", _("Polaroid PX-70 cold +") },
   { "polaroid_px-70_cold_++", _("Polaroid PX-70 cold ++") },
   { "polaroid_px-70_warm_--", _("Polaroid PX-70 warm --") },
@@ -353,10 +355,10 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   // negative color
   { "agfa_ultra_color_100", _("Agfa Ultra color 100") },
   { "agfa_vista_200", _("Agfa Vista 200") },
-  { "fuji_superia_200", _("Fuji Superia 200") },
-  { "fuji_superia_hg_1600", _("Fuji Superia hg 1600") },
-  { "fuji_superia_reala_100", _("Fuji Superia Reala 100") },
-  { "fuji_superia_x-tra_800", _("Fuji Superia X-Tra 800") },
+  { "fuji_Superia_200", _("Fuji Superia 200") },
+  { "fuji_Superia_hg_1600", _("Fuji Superia hg 1600") },
+  { "fuji_Superia_reala_100", _("Fuji Superia Reala 100") },
+  { "fuji_Superia_x-tra_800", _("Fuji Superia X-Tra 800") },
   { "kodak_elite_100_xpro", _("Kodak Elite 100 XPRO") },
   { "kodak_elite_color_200", _("Kodak Elite Color 200") },
   { "kodak_elite_color_400", _("Kodak Elite Color 400") },
@@ -412,22 +414,22 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "fuji_ilford_delta_3200", _("Fuji Ilford Delta 3200") },
   { "fuji_ilford_delta_3200_+", _("Fuji Ilford Delta 3200 +") },
   { "fuji_ilford_delta_3200_++", _("Fuji Ilford Delta 3200 ++") },
-  { "fuji_superia_100_-", _("Fuji superia 100 -") },
-  { "fuji_superia_100", _("Fuji superia 100") },
-  { "fuji_superia_100_+", _("Fuji superia 100 +") },
-  { "fuji_superia_100_++", _("Fuji superia 100 ++") },
-  { "fuji_superia_400_-", _("Fuji superia 400 -") },
-  { "fuji_superia_400", _("Fuji superia 400") },
-  { "fuji_superia_400_+", _("Fuji superia 400 +") },
-  { "fuji_superia_400_++", _("Fuji superia 400 ++") },
-  { "fuji_superia_800_-", _("Fuji superia 800 -") },
-  { "fuji_superia_800", _("Fuji superia 800") },
-  { "fuji_superia_800_+", _("Fuji superia 800 +") },
-  { "fuji_superia_800_++", _("Fuji superia 800 ++") },
-  { "fuji_superia_1600_-", _("Fuji superia 1600 -") },
-  { "fuji_superia_1600", _("Fuji superia 1600") },
-  { "fuji_superia_1600_+", _("Fuji superia 1600 +") },
-  { "fuji_superia_1600_++", _("Fuji superia 1600 ++") },
+  { "fuji_Superia_100_-", _("Fuji Superia 100 -") },
+  { "fuji_Superia_100", _("Fuji Superia 100") },
+  { "fuji_Superia_100_+", _("Fuji Superia 100 +") },
+  { "fuji_Superia_100_++", _("Fuji Superia 100 ++") },
+  { "fuji_Superia_400_-", _("Fuji Superia 400 -") },
+  { "fuji_Superia_400", _("Fuji Superia 400") },
+  { "fuji_Superia_400_+", _("Fuji Superia 400 +") },
+  { "fuji_Superia_400_++", _("Fuji Superia 400 ++") },
+  { "fuji_Superia_800_-", _("Fuji Superia 800 -") },
+  { "fuji_Superia_800", _("Fuji Superia 800") },
+  { "fuji_Superia_800_+", _("Fuji Superia 800 +") },
+  { "fuji_Superia_800_++", _("Fuji Superia 800 ++") },
+  { "fuji_Superia_1600_-", _("Fuji Superia 1600 -") },
+  { "fuji_Superia_1600", _("Fuji Superia 1600") },
+  { "fuji_Superia_1600_+", _("Fuji Superia 1600 +") },
+  { "fuji_Superia_1600_++", _("Fuji Superia 1600 ++") },
   { "kodak_portra_160_nc_-", _("Kodak Portra 160 NC -") },
   { "kodak_portra_160_nc", _("Kodak Portra 160 NC") },
   { "kodak_portra_160_nc_+", _("Kodak Portra 160 NC +") },
@@ -493,7 +495,7 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "fuji_provia_400f", _("Fuji Provia 400F") },
   { "fuji_provia_400x", _("Fuji Provia 400X") },
   { "fuji_sensia_100", _("Fuji Sensia 100") },
-  { "fuji_superia_200_xpro", _("Fuji Superia 200 XPRO") },
+  { "fuji_Superia_200_xpro", _("Fuji Superia 200 XPRO") },
   { "fuji_velvia_50", _("Fuji Velvia 50") },
   { "generic_fuji_astia_100", _("generic Fuji Astia 100") },
   { "generic_fuji_provia_100", _("generic Fuji Provia 100") },
@@ -577,12 +579,12 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "warm_yellow", _("warm yellow") }
 };
 
-typedef struct dt_iop_gmic_film_emulation_gui_data_t
+struct dt_iop_gmic_film_emulation_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *film, *strength, *brightness, *contrast, *gamma, *hue, *saturation, *normalize_colors;
   std::vector<std::string> film_list;
-} dt_iop_gmic_film_emulation_gui_data_t;
+};
 
 //----------------------------------------------------------------------
 // implement the module api
@@ -605,28 +607,28 @@ struct dt_iop_gmic_all_params_t
 
 DT_MODULE_INTROSPECTION(1, dt_iop_gmic_params_t)
 
-typedef struct dt_iop_gmic_params_t
+struct dt_iop_gmic_params_t
 {
   filters filter;
   dt_iop_gmic_all_params_t parameters;
-} dt_iop_gmic_params_t;
+};
 
 // types  dt_iop_gmic_params_t and dt_iop_gmic_data_t are
 // equal, thus no commit_params function needs to be implemented
 typedef dt_iop_gmic_params_t dt_iop_gmic_data_t;
 
-typedef struct dt_iop_gmic_gui_data_t
+struct dt_iop_gmic_gui_data_t
 {
   GtkWidget *gmic_filter;
   std::vector<filters> filter_list;
   dt_iop_gmic_expert_mode_gui_data_t expert_mode;
   dt_iop_gmic_sepia_gui_data_t sepia;
   dt_iop_gmic_film_emulation_gui_data_t film_emulation;
-} dt_iop_gmic_gui_data_t;
+};
 
-typedef struct dt_iop_gmic_global_data_t
+struct dt_iop_gmic_global_data_t
 {
-} dt_iop_gmic_global_data_t;
+};
 
 extern "C" const char *name()
 {
@@ -851,7 +853,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
     dt_bauhaus_combobox_add_aligned(g->film_emulation.film, film.printable.c_str(), DT_BAUHAUS_COMBOBOX_ALIGN_LEFT);
     g->film_emulation.film_list.push_back(film.film_type);
   }
-  dt_bauhaus_widget_set_label(g->film_emulation.film, NULL, _("film type"));
+  // dt_bauhaus_widget_set_label(g->film_emulation.film, NULL, _("film type"));
   gtk_widget_set_tooltip_text(g->film_emulation.film, _("choose emulated film type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), g->film_emulation.film, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.film), "value-changed",
@@ -1058,7 +1060,7 @@ extern "C" void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
   catch(gmic_exception &e)
   {
     if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL || piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-      dt_control_log(_("G'MIC error"));
+      dt_control_log("G'MIC error: %s", e.what());
   }
   const cimg_library::CImg<float> &out_img(image_list[0]);
   for(size_t j = 0; j < height; ++j)
