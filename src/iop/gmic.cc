@@ -1005,7 +1005,7 @@ extern "C" void gui_init(dt_iop_module_t *self)
 
   g->gmic_filter = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->gmic_filter, NULL, _("G'MIC filter"));
-  gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing film_type"));
+  gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing filter"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->gmic_filter, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
 
