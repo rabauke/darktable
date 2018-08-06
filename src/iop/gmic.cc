@@ -48,30 +48,36 @@ enum filter_type
   film_emulation
 };
 
+struct parameter_interface
+{
+  virtual filter_type get_filter() const = 0;
+
+  virtual void gui_init(dt_iop_module_t *self) const = 0;
+
+  virtual void gui_update(dt_iop_module_t *self) const = 0;
+};
+
 // --- no filter
 
 struct dt_iop_gmic_none_params_t
 {
   filter_type filter;
-  dt_iop_gmic_none_params_t()
-  {
-  }
-
   std::string gmic_command() const
   {
     return "";
   }
+};
 
-  static void gui_init(dt_iop_module_t *self);
-
-  static void gui_update(struct dt_iop_module_t *self);
-
-  static void command_callback(GtkWidget *w, dt_iop_module_t *self);
+struct dt_iop_gmic_none_parameters_t : public dt_iop_gmic_none_params_t, public parameter_interface
+{
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
 };
 
 struct dt_iop_gmic_none_gui_data_t
 {
-  dt_iop_gmic_none_params_t parameters;
+  dt_iop_gmic_none_parameters_t parameters;
 };
 
 // --- expert mode
@@ -80,19 +86,29 @@ struct dt_iop_gmic_expert_mode_params_t
 {
   filter_type filter;
   char command[1024];
-
   dt_iop_gmic_expert_mode_params_t() : command("")
   {
   }
-
   std::string gmic_command() const
   {
     return command;
   }
+};
 
-  static void gui_init(dt_iop_module_t *self);
+struct dt_iop_gmic_expert_mode_parameters_t : public dt_iop_gmic_expert_mode_params_t, public parameter_interface
+{
+  dt_iop_gmic_expert_mode_parameters_t() : dt_iop_gmic_expert_mode_params_t()
+  {
+  }
 
-  static void gui_update(struct dt_iop_module_t *self);
+  dt_iop_gmic_expert_mode_parameters_t(const dt_iop_gmic_expert_mode_params_t &other)
+    : dt_iop_gmic_expert_mode_params_t(other)
+  {
+  }
+
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
 
   static void command_callback(GtkWidget *w, dt_iop_module_t *self);
 };
@@ -101,7 +117,7 @@ struct dt_iop_gmic_expert_mode_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *command;
-  dt_iop_gmic_expert_mode_params_t parameters;
+  dt_iop_gmic_expert_mode_parameters_t parameters;
 };
 
 // --- sepia
@@ -121,10 +137,21 @@ struct dt_iop_gmic_sepia_params_t
     str << "fx_sepia " << brightness * 100 << ',' << contrast * 100 << ',' << gamma * 100;
     return str.str();
   }
+};
 
-  static void gui_init(dt_iop_module_t *self);
+struct dt_iop_gmic_sepia_parameters_t : public dt_iop_gmic_sepia_params_t, public parameter_interface
+{
+  dt_iop_gmic_sepia_parameters_t() : dt_iop_gmic_sepia_params_t()
+  {
+  }
 
-  static void gui_update(struct dt_iop_module_t *self);
+  dt_iop_gmic_sepia_parameters_t(const dt_iop_gmic_sepia_params_t &other) : dt_iop_gmic_sepia_params_t(other)
+  {
+  }
+
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
 
   static void brightness_callback(GtkWidget *w, dt_iop_module_t *self);
 
@@ -137,14 +164,13 @@ struct dt_iop_gmic_sepia_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *brightness, *contrast, *gamma;
-  dt_iop_gmic_sepia_params_t parameters;
+  dt_iop_gmic_sepia_parameters_t parameters;
 };
 
 // --- film emulation
 
 struct film_map
 {
-  filter_type filter;
   const std::string film_type;
   const std::string printable;
 
@@ -182,26 +208,6 @@ struct dt_iop_gmic_film_emulation_params_t
         << 100 * gamma << ',' << 100 * hue << ',' << 100 * saturation << ',' << normalize_colors;
     return str.str();
   }
-
-  static void gui_init(dt_iop_module_t *self);
-
-  static void gui_update(struct dt_iop_module_t *self);
-
-  static void film_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void strength_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void brightness_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void contrast_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void gamma_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void hue_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void saturation_callback(GtkWidget *w, dt_iop_module_t *self);
-
-  static void normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
 const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
@@ -590,32 +596,58 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "warm_yellow", _("warm yellow") }
 };
 
+struct dt_iop_gmic_film_emulation_parameters_t : public dt_iop_gmic_film_emulation_params_t,
+                                                 public parameter_interface
+{
+  dt_iop_gmic_film_emulation_parameters_t() : dt_iop_gmic_film_emulation_params_t()
+  {
+  }
+
+  dt_iop_gmic_film_emulation_parameters_t(const dt_iop_gmic_film_emulation_params_t &other)
+    : dt_iop_gmic_film_emulation_params_t(other)
+  {
+  }
+
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+
+  static void film_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void strength_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void brightness_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void contrast_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void gamma_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void hue_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void saturation_callback(GtkWidget *w, dt_iop_module_t *self);
+
+  static void normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
 struct dt_iop_gmic_film_emulation_gui_data_t
 {
   GtkWidget *box;
   GtkWidget *film, *strength, *brightness, *contrast, *gamma, *hue, *saturation, *normalize_colors;
   std::vector<std::string> film_list;
-  dt_iop_gmic_film_emulation_params_t parameters;
+  dt_iop_gmic_film_emulation_parameters_t parameters;
 };
 
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
 
-// struct dt_iop_gmic_all_params_t
-//{
-//  dt_iop_gmic_expert_mode_params_t expert_mode;
-//  dt_iop_gmic_sepia_params_t sepia;
-//  dt_iop_gmic_film_emulation_params_t film_emulation;
-//};
-
 DT_MODULE_INTROSPECTION(1, dt_iop_gmic_params_t)
 
-struct dt_iop_gmic_params_t
+typedef struct dt_iop_gmic_params_t
 {
   filter_type filter;
-  dt_iop_gmic_expert_mode_params_t parameters;
-};
+  char parameters[1024];
+} dt_iop_gmic_params_t;
 
 // types  dt_iop_gmic_params_t and dt_iop_gmic_data_t are
 // equal, thus no commit_params function needs to be implemented
@@ -624,11 +656,15 @@ typedef dt_iop_gmic_params_t dt_iop_gmic_data_t;
 struct dt_iop_gmic_gui_data_t
 {
   GtkWidget *gmic_filter;
-  std::vector<filter_type> filter_list;
   dt_iop_gmic_none_gui_data_t none;
   dt_iop_gmic_expert_mode_gui_data_t expert_mode;
   dt_iop_gmic_sepia_gui_data_t sepia;
   dt_iop_gmic_film_emulation_gui_data_t film_emulation;
+  const std::vector<parameter_interface *> filter_list{ &none.parameters, &sepia.parameters,
+                                                        &film_emulation.parameters, &expert_mode.parameters };
+  dt_iop_gmic_gui_data_t() = default;
+  dt_iop_gmic_gui_data_t(const dt_iop_gmic_gui_data_t &) = delete;
+  void operator=(const dt_iop_gmic_gui_data_t &) = delete;
 };
 
 struct dt_iop_gmic_global_data_t
@@ -650,13 +686,13 @@ extern "C" int groups()
   return IOP_GROUP_EFFECT;
 }
 
-extern "C" void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+extern "C" void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = std::calloc(1, sizeof(dt_iop_gmic_data_t));
   self->commit_params(self, self->default_params, pipe, piece);
 }
 
-extern "C" void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+extern "C" void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   std::free(piece->data);
   piece->data = nullptr;
@@ -679,7 +715,7 @@ extern "C" void init(dt_iop_module_t *self)
   self->priority = 998; // module order created by iop_dependencies.py, do not edit!
   self->params_size = sizeof(dt_iop_gmic_params_t);
   self->gui_data = nullptr;
-  dt_iop_gmic_params_t tmp{ none, dt_iop_gmic_expert_mode_params_t() };
+  dt_iop_gmic_params_t tmp{ none };
   std::memcpy(self->params, &tmp, sizeof(dt_iop_gmic_params_t));
   std::memcpy(self->default_params, &tmp, sizeof(dt_iop_gmic_params_t));
 }
@@ -694,7 +730,7 @@ static void filter_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
-  p->filter = g->filter_list[dt_bauhaus_combobox_get(w)];
+  p->filter = g->filter_list[dt_bauhaus_combobox_get(w)]->get_filter();
   if(p->filter == none)
   {
     dt_iop_gmic_none_params_t *p2 = reinterpret_cast<dt_iop_gmic_none_params_t *>(self->params);
@@ -720,30 +756,36 @@ static void filter_callback(GtkWidget *w, dt_iop_module_t *self)
     g->film_emulation.parameters.filter = p->filter;
     *p2 = g->film_emulation.parameters;
   }
-  dt_iop_gmic_none_params_t::gui_update(self);
-  dt_iop_gmic_expert_mode_params_t::gui_update(self);
-  dt_iop_gmic_sepia_params_t::gui_update(self);
-  dt_iop_gmic_film_emulation_params_t::gui_update(self);
+  for(const auto f : g->filter_list) f->gui_update(self);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 // --- none
 
-void dt_iop_gmic_none_params_t::gui_init(dt_iop_module_t *self)
+filter_type dt_iop_gmic_none_parameters_t::get_filter() const
+{
+  return none;
+}
+
+void dt_iop_gmic_none_parameters_t::gui_init(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_bauhaus_combobox_add(g->gmic_filter, _("none"));
-  g->filter_list.push_back(none);
-  g->none.parameters = dt_iop_gmic_none_params_t();
+  g->none.parameters = dt_iop_gmic_none_parameters_t();
 }
 
-void dt_iop_gmic_none_params_t::gui_update(struct dt_iop_module_t *self)
+void dt_iop_gmic_none_parameters_t::gui_update(dt_iop_module_t *self) const
 {
 }
 
 // --- expert mode
 
-void dt_iop_gmic_expert_mode_params_t::gui_init(dt_iop_module_t *self)
+filter_type dt_iop_gmic_expert_mode_parameters_t::get_filter() const
+{
+  return expert_mode;
+}
+
+void dt_iop_gmic_expert_mode_parameters_t::gui_init(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_expert_mode_params_t *p = reinterpret_cast<dt_iop_gmic_expert_mode_params_t *>(self->params);
@@ -751,7 +793,6 @@ void dt_iop_gmic_expert_mode_params_t::gui_init(dt_iop_module_t *self)
     g->expert_mode.parameters = *p;
   else
     g->expert_mode.parameters = dt_iop_gmic_expert_mode_params_t();
-  g->filter_list.push_back(expert_mode);
   dt_bauhaus_combobox_add(g->gmic_filter, _("expert mode"));
   g->expert_mode.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   gtk_box_pack_start(GTK_BOX(self->widget), g->expert_mode.box, TRUE, TRUE, 0);
@@ -763,14 +804,14 @@ void dt_iop_gmic_expert_mode_params_t::gui_init(dt_iop_module_t *self)
   dt_gui_key_accel_block_on_focus_connect(g->expert_mode.command);
   gtk_box_pack_start(GTK_BOX(g->expert_mode.box), GTK_WIDGET(g->expert_mode.command), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->expert_mode.command), "activate",
-                   G_CALLBACK(dt_iop_gmic_expert_mode_params_t::command_callback), self);
+                   G_CALLBACK(dt_iop_gmic_expert_mode_parameters_t::command_callback), self);
 
   gtk_widget_show_all(g->expert_mode.box);
   gtk_widget_set_no_show_all(g->expert_mode.box, TRUE);
   gtk_widget_set_visible(g->expert_mode.box, p->filter == expert_mode ? TRUE : FALSE);
 }
 
-void dt_iop_gmic_expert_mode_params_t::gui_update(struct dt_iop_module_t *self)
+void dt_iop_gmic_expert_mode_parameters_t::gui_update(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_expert_mode_params_t *p = reinterpret_cast<dt_iop_gmic_expert_mode_params_t *>(self->params);
@@ -782,7 +823,7 @@ void dt_iop_gmic_expert_mode_params_t::gui_update(struct dt_iop_module_t *self)
   }
 }
 
-void dt_iop_gmic_expert_mode_params_t::command_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_expert_mode_parameters_t::command_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_expert_mode_params_t *p = reinterpret_cast<dt_iop_gmic_expert_mode_params_t *>(self->params);
@@ -793,7 +834,12 @@ void dt_iop_gmic_expert_mode_params_t::command_callback(GtkWidget *w, dt_iop_mod
 
 // --- sepia
 
-void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self)
+filter_type dt_iop_gmic_sepia_parameters_t::get_filter() const
+{
+  return sepia;
+}
+
+void dt_iop_gmic_sepia_parameters_t::gui_init(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_sepia_params_t *p = reinterpret_cast<dt_iop_gmic_sepia_params_t *>(self->params);
@@ -801,7 +847,6 @@ void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self)
     g->sepia.parameters = *p;
   else
     g->sepia.parameters = dt_iop_gmic_sepia_params_t();
-  g->filter_list.push_back(sepia);
   dt_bauhaus_combobox_add(g->gmic_filter, _("sepia"));
   g->sepia.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   gtk_box_pack_start(GTK_BOX(self->widget), g->sepia.box, TRUE, TRUE, 0);
@@ -811,28 +856,28 @@ void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.brightness), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.brightness), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_sepia_params_t::brightness_callback), self);
+                   G_CALLBACK(dt_iop_gmic_sepia_parameters_t::brightness_callback), self);
 
   g->sepia.contrast = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->sepia.parameters.contrast, 3);
   dt_bauhaus_widget_set_label(g->sepia.contrast, NULL, _("contrast"));
   gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.contrast), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.contrast), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_sepia_params_t::contrast_callback), self);
+                   G_CALLBACK(dt_iop_gmic_sepia_parameters_t::contrast_callback), self);
 
   g->sepia.gamma = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->sepia.parameters.gamma, 3);
   dt_bauhaus_widget_set_label(g->sepia.gamma, NULL, _("gamma"));
   gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia film_type"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.gamma), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.gamma), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_sepia_params_t::gamma_callback), self);
+                   G_CALLBACK(dt_iop_gmic_sepia_parameters_t::gamma_callback), self);
 
   gtk_widget_show_all(g->sepia.box);
   gtk_widget_set_no_show_all(g->sepia.box, TRUE);
   gtk_widget_set_visible(g->sepia.box, p->filter == sepia ? TRUE : FALSE);
 }
 
-void dt_iop_gmic_sepia_params_t::gui_update(struct dt_iop_module_t *self)
+void dt_iop_gmic_sepia_parameters_t::gui_update(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_sepia_params_t *p = reinterpret_cast<dt_iop_gmic_sepia_params_t *>(self->params);
@@ -846,7 +891,7 @@ void dt_iop_gmic_sepia_params_t::gui_update(struct dt_iop_module_t *self)
   }
 }
 
-void dt_iop_gmic_sepia_params_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_sepia_parameters_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -856,7 +901,7 @@ void dt_iop_gmic_sepia_params_t::brightness_callback(GtkWidget *w, dt_iop_module
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_sepia_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_sepia_parameters_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -866,7 +911,7 @@ void dt_iop_gmic_sepia_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_sepia_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_sepia_parameters_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -878,11 +923,15 @@ void dt_iop_gmic_sepia_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *s
 
 // --- film emulation
 
-void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
+filter_type dt_iop_gmic_film_emulation_parameters_t::get_filter() const
+{
+  return film_emulation;
+}
+
+void dt_iop_gmic_film_emulation_parameters_t::gui_init(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_film_emulation_params_t *p = reinterpret_cast<dt_iop_gmic_film_emulation_params_t *>(self->params);
-  g->filter_list.push_back(film_emulation);
   if(p->filter == film_emulation)
     g->film_emulation.parameters = *p;
   else
@@ -892,16 +941,17 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->film_emulation.box, TRUE, TRUE, 0);
 
   g->film_emulation.film = dt_bauhaus_combobox_new(self);
-  for(const auto &film : film_maps)
+  for(const auto &film_map : film_maps)
   {
-    dt_bauhaus_combobox_add_aligned(g->film_emulation.film, film.printable.c_str(), DT_BAUHAUS_COMBOBOX_ALIGN_LEFT);
-    g->film_emulation.film_list.push_back(film.film_type);
+    dt_bauhaus_combobox_add_aligned(g->film_emulation.film, film_map.printable.c_str(),
+                                    DT_BAUHAUS_COMBOBOX_ALIGN_LEFT);
+    g->film_emulation.film_list.push_back(film_map.film_type);
   }
   // dt_bauhaus_widget_set_label(g->film_emulation.film, NULL, _("film type"));
   gtk_widget_set_tooltip_text(g->film_emulation.film, _("choose emulated film type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), g->film_emulation.film, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.film), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::film_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::film_callback), self);
 
   g->film_emulation.strength
       = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->film_emulation.parameters.strength, 3);
@@ -909,7 +959,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.strength, _("strength of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.strength), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.strength), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::strength_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::strength_callback), self);
 
   g->film_emulation.brightness
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->film_emulation.parameters.brightness, 3);
@@ -917,7 +967,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.brightness, _("brightness of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.brightness), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.brightness), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::brightness_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::brightness_callback), self);
 
   g->film_emulation.contrast
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->film_emulation.parameters.contrast, 3);
@@ -925,7 +975,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.contrast, _("contrast of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.contrast), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.contrast), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::contrast_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::contrast_callback), self);
 
   g->film_emulation.gamma
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->film_emulation.parameters.gamma, 3);
@@ -933,14 +983,14 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.gamma, _("gamma value of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.gamma), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.gamma), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::gamma_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::gamma_callback), self);
 
   g->film_emulation.hue = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->film_emulation.parameters.hue, 3);
   dt_bauhaus_widget_set_label(g->film_emulation.hue, NULL, _("hue"));
   gtk_widget_set_tooltip_text(g->film_emulation.hue, _("hue-shift of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.hue), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.hue), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::hue_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::hue_callback), self);
 
   g->film_emulation.saturation
       = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->film_emulation.parameters.saturation, 3);
@@ -948,7 +998,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.saturation, _("saturation of the film emulation film_type"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), GTK_WIDGET(g->film_emulation.saturation), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.saturation), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::saturation_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::saturation_callback), self);
 
   g->film_emulation.normalize_colors = dt_bauhaus_combobox_new(self);
   dt_bauhaus_combobox_add(g->film_emulation.normalize_colors, _("none"));
@@ -960,14 +1010,14 @@ void dt_iop_gmic_film_emulation_params_t::gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_emulation.normalize_colors, _("choose how to normalize colors"));
   gtk_box_pack_start(GTK_BOX(g->film_emulation.box), g->film_emulation.normalize_colors, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->film_emulation.normalize_colors), "value-changed",
-                   G_CALLBACK(dt_iop_gmic_film_emulation_params_t::normalize_colors_callback), self);
+                   G_CALLBACK(dt_iop_gmic_film_emulation_parameters_t::normalize_colors_callback), self);
 
   gtk_widget_show_all(g->film_emulation.box);
   gtk_widget_set_no_show_all(g->film_emulation.box, TRUE);
   gtk_widget_set_visible(g->film_emulation.box, p->filter == film_emulation ? TRUE : FALSE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::gui_update(struct dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::gui_update(dt_iop_module_t *self) const
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_film_emulation_params_t *p = reinterpret_cast<dt_iop_gmic_film_emulation_params_t *>(self->params);
@@ -987,7 +1037,7 @@ void dt_iop_gmic_film_emulation_params_t::gui_update(struct dt_iop_module_t *sel
   }
 }
 
-void dt_iop_gmic_film_emulation_params_t::film_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::film_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -997,7 +1047,7 @@ void dt_iop_gmic_film_emulation_params_t::film_callback(GtkWidget *w, dt_iop_mod
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::strength_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::strength_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1007,7 +1057,7 @@ void dt_iop_gmic_film_emulation_params_t::strength_callback(GtkWidget *w, dt_iop
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1017,7 +1067,7 @@ void dt_iop_gmic_film_emulation_params_t::brightness_callback(GtkWidget *w, dt_i
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1027,7 +1077,7 @@ void dt_iop_gmic_film_emulation_params_t::contrast_callback(GtkWidget *w, dt_iop
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1037,7 +1087,7 @@ void dt_iop_gmic_film_emulation_params_t::gamma_callback(GtkWidget *w, dt_iop_mo
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::hue_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::hue_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1047,7 +1097,7 @@ void dt_iop_gmic_film_emulation_params_t::hue_callback(GtkWidget *w, dt_iop_modu
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::saturation_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::saturation_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1057,7 +1107,7 @@ void dt_iop_gmic_film_emulation_params_t::saturation_callback(GtkWidget *w, dt_i
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-void dt_iop_gmic_film_emulation_params_t::normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self)
+void dt_iop_gmic_film_emulation_parameters_t::normalize_colors_callback(GtkWidget *w, dt_iop_module_t *self)
 {
   if(self->dt->gui->reset) return;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
@@ -1079,22 +1129,17 @@ extern "C" void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), g->gmic_filter, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
 
-  dt_iop_gmic_none_params_t::gui_init(self);
-  dt_iop_gmic_sepia_params_t::gui_init(self);
-  dt_iop_gmic_film_emulation_params_t::gui_init(self);
-  dt_iop_gmic_expert_mode_params_t::gui_init(self);
+  for(const auto f : g->filter_list) f->gui_init(self);
 }
 
-extern "C" void gui_update(struct dt_iop_module_t *self)
+extern "C" void gui_update(dt_iop_module_t *self)
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
-  auto i_filter = std::find(g->filter_list.begin(), g->filter_list.end(), p->filter);
+  auto i_filter = std::find_if(g->filter_list.begin(), g->filter_list.end(),
+                               [p](parameter_interface *i) { return p->filter == i->get_filter(); });
   if(i_filter != g->filter_list.end()) dt_bauhaus_combobox_set(g->gmic_filter, i_filter - g->filter_list.begin());
-  dt_iop_gmic_none_params_t::gui_update(self);
-  dt_iop_gmic_expert_mode_params_t::gui_update(self);
-  dt_iop_gmic_sepia_params_t::gui_update(self);
-  dt_iop_gmic_film_emulation_params_t::gui_update(self);
+  for(const auto f : g->filter_list) f->gui_update(self);
 }
 
 extern "C" void gui_cleanup(dt_iop_module_t *self)
@@ -1104,7 +1149,7 @@ extern "C" void gui_cleanup(dt_iop_module_t *self)
   self->gui_data = nullptr;
 }
 
-extern "C" void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const size_t ch = piece->colors;
