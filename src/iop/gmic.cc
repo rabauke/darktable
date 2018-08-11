@@ -50,7 +50,11 @@ enum filter_type
   expert_mode,
   sepia,
   film_emulation,
-  custom_film_emulation
+  custom_film_emulation,
+  sharpen_unsharp_mask,
+  sharpen_Richardson_Lucy,
+  sharpen_Golden_Meinel,
+  sharpen_inverse_diffusion
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -66,11 +70,17 @@ struct parameter_interface
   virtual filter_type get_filter() const = 0;
   virtual void gui_init(dt_iop_module_t *self) const = 0;
   virtual void gui_update(dt_iop_module_t *self) const = 0;
-
   virtual void gui_reset(dt_iop_module_t *self) = 0;
 };
 
 struct dt_iop_gmic_gui_data_t;
+
+// --- helper funcions
+
+template <typename T> T clamp(const T a, const T b, const T x)
+{
+  return std::min(b, std::max(a, x));
+}
 
 // --- no filter
 
@@ -157,9 +167,9 @@ struct dt_iop_gmic_sepia_params_t : public parameter_interface
     if(other.filter == sepia
        and std::sscanf(other.parameters, "fx_sepia %g,%g,%g", &p.brightness, &p.contrast, &p.gamma) == 3)
     {
-      p.brightness /= 100;
-      p.contrast /= 100;
-      p.gamma /= 100;
+      p.brightness = clamp(-1.f, 1.f, p.brightness / 100);
+      p.contrast = clamp(-1.f, 1.f, p.contrast / 100);
+      p.gamma = clamp(-1.f, 1.f, p.gamma / 100);
       *this = p;
     }
   }
@@ -225,12 +235,13 @@ struct dt_iop_gmic_film_emulation_params_t : public parameter_interface
                        &p.hue, &p.saturation, &p.normalize_colors)
                == 8)
     {
-      p.strength /= 100;
-      p.brightness /= 100;
-      p.contrast /= 100;
-      p.gamma /= 100;
-      p.hue /= 100;
-      p.saturation /= 100;
+      p.strength = clamp(0.f, 1.f, p.strength / 100);
+      p.brightness = clamp(-1.f, 1.f, p.brightness / 100);
+      p.contrast = clamp(-1.f, 1.f, p.contrast / 100);
+      p.gamma = clamp(-1.f, 1.f, p.gamma / 100);
+      p.hue = clamp(-1.f, 1.f, p.hue / 100);
+      p.saturation = clamp(-1.f, 1.f, p.saturation / 100);
+      p.normalize_colors = clamp(0, 1, p.normalize_colors);
       *this = p;
     }
   }
@@ -680,12 +691,13 @@ struct dt_iop_gmic_custom_film_emulation_params_t : public parameter_interface
                        &p.hue, &p.saturation, &p.normalize_colors)
                == 8)
     {
-      p.strength /= 100;
-      p.brightness /= 100;
-      p.contrast /= 100;
-      p.gamma /= 100;
-      p.hue /= 100;
-      p.saturation /= 100;
+      p.strength = clamp(0.f, 1.f, p.strength / 100);
+      p.brightness = clamp(-1.f, 1.f, p.brightness / 100);
+      p.contrast = clamp(-1.f, 1.f, p.contrast / 100);
+      p.gamma = clamp(-1.f, 1.f, p.gamma / 100);
+      p.hue = clamp(-1.f, 1.f, p.hue / 100);
+      p.saturation = clamp(-1.f, 1.f, p.saturation / 100);
+      p.normalize_colors = clamp(0, 1, p.normalize_colors);
       *this = p;
     }
   }
@@ -751,6 +763,61 @@ struct dt_iop_gmic_custom_film_emulation_gui_data_t
   dt_iop_gmic_custom_film_emulation_params_t parameters;
 };
 
+// --- sharpen unsharp mask
+
+// --- sharpen Richardson Lucy
+
+struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
+{
+  filter_type filter{ sharpen_Richardson_Lucy };
+  float sigma{ 1.f };
+  int iterations{ 10 }, blur{ 1 };
+
+  dt_iop_gmic_sharpen_Richardson_Lucy_params_t() = default;
+
+  dt_iop_gmic_sharpen_Richardson_Lucy_params_t(const dt_iop_gmic_params_t &other)
+    : dt_iop_gmic_sharpen_Richardson_Lucy_params_t()
+  {
+    dt_iop_gmic_sharpen_Richardson_Lucy_params_t p;
+    if(other.filter == sharpen_Richardson_Lucy
+       and std::sscanf(other.parameters, "deblur_richardsonlucy %g,%d,%d", &p.sigma, &p.iterations, &p.blur) == 3)
+    {
+      p.sigma = clamp(0.5f, 10.f, p.sigma);
+      p.iterations = clamp(1, 100, p.iterations);
+      p.blur = clamp(0, 1, p.blur);
+      *this = p;
+    }
+  }
+
+  dt_iop_gmic_params_t to_gmic_params() const override
+  {
+    dt_iop_gmic_params_t ret;
+    ret.filter = sharpen_Richardson_Lucy;
+    std::snprintf(ret.parameters, sizeof(ret.parameters), "deblur_richardsonlucy %g,%d,%d", sigma, iterations,
+                  blur);
+    return ret;
+  }
+
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void sigma_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void iterations_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void blur_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *sigma, *iterations, *blur;
+  dt_iop_gmic_sharpen_Richardson_Lucy_params_t parameters;
+};
+
+// --- sharpen Golden Meinel
+
+// --- sharpen inverse diffusion
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -769,10 +836,11 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_sepia_gui_data_t sepia;
   dt_iop_gmic_film_emulation_gui_data_t film_emulation;
   dt_iop_gmic_custom_film_emulation_gui_data_t custom_film_emulation;
-  const std::vector<parameter_interface *> filter_list{ &none.parameters, &sepia.parameters,
-                                                        &film_emulation.parameters,
-                                                        &custom_film_emulation.parameters,
-                                                        &expert_mode.parameters };
+  dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t sharpen_Richardson_Lucy;
+  const std::vector<parameter_interface *> filter_list{
+    &none.parameters,           &sharpen_Richardson_Lucy.parameters, &sepia.parameters,
+    &film_emulation.parameters, &custom_film_emulation.parameters,   &expert_mode.parameters
+  };
   dt_iop_gmic_gui_data_t() = default;
   dt_iop_gmic_gui_data_t(const dt_iop_gmic_gui_data_t &) = delete;
   void operator=(const dt_iop_gmic_gui_data_t &) = delete;
@@ -949,21 +1017,21 @@ void dt_iop_gmic_sepia_params_t::gui_init(dt_iop_module_t *self) const
 
   g->sepia.brightness = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->sepia.parameters.brightness, 3);
   dt_bauhaus_widget_set_label(g->sepia.brightness, NULL, _("brightness"));
-  gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia film_type"));
+  gtk_widget_set_tooltip_text(g->sepia.brightness, _("brightness of the sepia effect"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.brightness), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.brightness), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::brightness_callback), self);
 
   g->sepia.contrast = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->sepia.parameters.contrast, 3);
   dt_bauhaus_widget_set_label(g->sepia.contrast, NULL, _("contrast"));
-  gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia film_type"));
+  gtk_widget_set_tooltip_text(g->sepia.contrast, _("contrast of the sepia effect"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.contrast), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.contrast), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::contrast_callback), self);
 
   g->sepia.gamma = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->sepia.parameters.gamma, 3);
   dt_bauhaus_widget_set_label(g->sepia.gamma, NULL, _("gamma"));
-  gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia film_type"));
+  gtk_widget_set_tooltip_text(g->sepia.gamma, _("gamma value of the sepia effect"));
   gtk_box_pack_start(GTK_BOX(g->sepia.box), GTK_WIDGET(g->sepia.gamma), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->sepia.gamma), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sepia_params_t::gamma_callback), self);
@@ -1445,6 +1513,112 @@ void dt_iop_gmic_custom_film_emulation_params_t::normalize_colors_callback(GtkWi
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
+// --- sharpen unsharp mask
+
+// --- sharpen Richardson Lucy
+
+filter_type dt_iop_gmic_sharpen_Richardson_Lucy_params_t::get_filter() const
+{
+  return sharpen_Richardson_Lucy;
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == sharpen_Richardson_Lucy)
+    g->sharpen_Richardson_Lucy.parameters = *p;
+  else
+    g->sharpen_Richardson_Lucy.parameters = dt_iop_gmic_sharpen_Richardson_Lucy_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("sharpen (Richardson-Lucy)"));
+  g->sharpen_Richardson_Lucy.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->sharpen_Richardson_Lucy.box, TRUE, TRUE, 0);
+
+  g->sharpen_Richardson_Lucy.sigma
+      = dt_bauhaus_slider_new_with_range(self, 0.5, 10, 0.05, g->sharpen_Richardson_Lucy.parameters.sigma, 2);
+  dt_bauhaus_widget_set_label(g->sharpen_Richardson_Lucy.sigma, NULL, _("sigma"));
+  gtk_widget_set_tooltip_text(g->sharpen_Richardson_Lucy.sigma, _("width of the sharpening filter"));
+  gtk_box_pack_start(GTK_BOX(g->sharpen_Richardson_Lucy.box), GTK_WIDGET(g->sharpen_Richardson_Lucy.sigma), TRUE,
+                     TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sharpen_Richardson_Lucy.sigma), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sharpen_Richardson_Lucy_params_t::sigma_callback), self);
+
+  g->sharpen_Richardson_Lucy.iterations
+      = dt_bauhaus_slider_new_with_range(self, 1, 100, 1, g->sharpen_Richardson_Lucy.parameters.iterations, 0);
+  dt_bauhaus_widget_set_label(g->sharpen_Richardson_Lucy.iterations, NULL, _("iterations"));
+  gtk_widget_set_tooltip_text(g->sharpen_Richardson_Lucy.iterations, _("number of iterations"));
+  gtk_box_pack_start(GTK_BOX(g->sharpen_Richardson_Lucy.box), GTK_WIDGET(g->sharpen_Richardson_Lucy.iterations),
+                     TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sharpen_Richardson_Lucy.iterations), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sharpen_Richardson_Lucy_params_t::iterations_callback), self);
+
+  g->sharpen_Richardson_Lucy.blur = dt_bauhaus_combobox_new(self);
+  dt_bauhaus_combobox_add(g->sharpen_Richardson_Lucy.blur, _("expnential"));
+  dt_bauhaus_combobox_add(g->sharpen_Richardson_Lucy.blur, _("Gaussian"));
+  dt_bauhaus_widget_set_label(g->sharpen_Richardson_Lucy.blur, NULL, _("blur type"));
+  gtk_widget_set_tooltip_text(g->sharpen_Richardson_Lucy.blur, _("choose blur method"));
+  gtk_box_pack_start(GTK_BOX(g->sharpen_Richardson_Lucy.box), g->sharpen_Richardson_Lucy.blur, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sharpen_Richardson_Lucy.blur), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sharpen_Richardson_Lucy_params_t::blur_callback), self);
+
+  gtk_widget_show_all(g->sharpen_Richardson_Lucy.box);
+  gtk_widget_set_no_show_all(g->sharpen_Richardson_Lucy.box, TRUE);
+  gtk_widget_set_visible(g->sharpen_Richardson_Lucy.box, p->filter == sharpen_Richardson_Lucy ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->sharpen_Richardson_Lucy.box, p->filter == sharpen_Richardson_Lucy ? TRUE : FALSE);
+  if(p->filter == sharpen_Richardson_Lucy)
+  {
+    g->sharpen_Richardson_Lucy.parameters = *p;
+    dt_bauhaus_slider_set(g->sharpen_Richardson_Lucy.sigma, g->sharpen_Richardson_Lucy.parameters.sigma);
+    dt_bauhaus_slider_set(g->sharpen_Richardson_Lucy.iterations, g->sharpen_Richardson_Lucy.parameters.iterations);
+    dt_bauhaus_combobox_set(g->sharpen_Richardson_Lucy.blur, g->sharpen_Richardson_Lucy.parameters.blur);
+  }
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_sharpen_Richardson_Lucy_params_t();
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::sigma_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->sharpen_Richardson_Lucy.parameters.sigma = dt_bauhaus_slider_get(w);
+  *p = g->sharpen_Richardson_Lucy.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::iterations_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->sharpen_Richardson_Lucy.parameters.iterations = static_cast<int>(std::round(dt_bauhaus_slider_get(w)));
+  *p = g->sharpen_Richardson_Lucy.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::blur_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->sharpen_Richardson_Lucy.parameters.blur = dt_bauhaus_combobox_get(w);
+  *p = g->sharpen_Richardson_Lucy.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+// --- sharpen Golden Meinel
+
+// --- sharpen inverse diffusion
+
 //--------------------------------------------------------------------------------------------------------
 
 extern "C" void gui_init(dt_iop_module_t *self)
@@ -1508,6 +1682,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
   try
   {
     dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(piece->data);
+    std::cerr << "### G'MIC :" << p->parameters << std::endl;
     gmic(p->parameters, image_list, image_names);
   }
   catch(gmic_exception &e)
