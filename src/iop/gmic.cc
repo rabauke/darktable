@@ -82,6 +82,41 @@ template <typename T> T clamp(const T a, const T b, const T x)
   return std::min(b, std::max(a, x));
 }
 
+static const std::vector<const char *> color_channels{ _("all"),
+                                                       _("RGBA (all)"),
+                                                       _("RGB (all)"),
+                                                       _("RGB (red)"),
+                                                       _("RGB (green)"),
+                                                       _("RGB (blue)"),
+                                                       _("RGBA (alpha)"),
+                                                       _("linear RGB (all)"),
+                                                       _("linear RGB (red)"),
+                                                       _("linear RGB (green)"),
+                                                       _("linear RGB (blue)"),
+                                                       _("YCbCr (luminance)"),
+                                                       _("YCbCr (blue-red chrominances)"),
+                                                       _("YCbCr (blue chrominance)"),
+                                                       _("YCbCr (red chrominance)"),
+                                                       _("YCbCr (green chrominance)"),
+                                                       _("Lab (lightness)"),
+                                                       _("Lab (ab-chrominances)"),
+                                                       _("Lab (a-chrominance)"),
+                                                       _("Lab (b-chrominance)"),
+                                                       _("Lch (ch-chrominances)"),
+                                                       _("Lch (c-chrominance)"),
+                                                       _("Lch (h-chrominance)"),
+                                                       _("HSV (hue)"),
+                                                       _("HSV (saturation)"),
+                                                       _("HSV (value)"),
+                                                       _("HSI (intensity)"),
+                                                       _("HSL (lightness)"),
+                                                       _("CMYK (cyan)"),
+                                                       _("CMYK (magenta)"),
+                                                       _("CMYK (yellow)"),
+                                                       _("CMYK (key)"),
+                                                       _("YIQ (luma)"),
+                                                       _("YIQ (chromas)") };
+
 // --- no filter
 
 struct dt_iop_gmic_none_params_t : public parameter_interface
@@ -165,7 +200,7 @@ struct dt_iop_gmic_sepia_params_t : public parameter_interface
   {
     dt_iop_gmic_sepia_params_t p;
     if(other.filter == sepia
-       and std::sscanf(other.parameters, "fx_sepia %g,%g,%g", &p.brightness, &p.contrast, &p.gamma) == 3)
+       and std::sscanf(other.parameters, "dt_sepia %g,%g,%g", &p.brightness, &p.contrast, &p.gamma) == 3)
     {
       p.brightness = clamp(-1.f, 1.f, p.brightness / 100);
       p.contrast = clamp(-1.f, 1.f, p.contrast / 100);
@@ -178,7 +213,7 @@ struct dt_iop_gmic_sepia_params_t : public parameter_interface
   {
     dt_iop_gmic_params_t ret;
     ret.filter = sepia;
-    std::snprintf(ret.parameters, sizeof(ret.parameters), "fx_sepia %g,%g,%g", brightness * 100, contrast * 100,
+    std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_sepia %g,%g,%g", brightness * 100, contrast * 100,
                   gamma * 100);
     return ret;
   }
@@ -230,7 +265,7 @@ struct dt_iop_gmic_film_emulation_params_t : public parameter_interface
   {
     dt_iop_gmic_film_emulation_params_t p;
     if(other.filter == film_emulation
-       and std::sscanf(other.parameters, "_fx_emulate_film 1,\"%127[^\"]\",%g,%g,%g,%g,%g,%g,%i",
+       and std::sscanf(other.parameters, "dt_film_emulation 1,\"%127[^\"]\",%g,%g,%g,%g,%g,%g,%i",
                        reinterpret_cast<char *>(&p.film), &p.strength, &p.brightness, &p.contrast, &p.gamma,
                        &p.hue, &p.saturation, &p.normalize_colors)
                == 8)
@@ -250,7 +285,7 @@ struct dt_iop_gmic_film_emulation_params_t : public parameter_interface
   {
     dt_iop_gmic_params_t ret;
     ret.filter = film_emulation;
-    std::snprintf(ret.parameters, sizeof(ret.parameters), "_fx_emulate_film 1,\"%s\",%g,%g,%g,%g,%g,%g,%i", film,
+    std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_film_emulation 1,\"%s\",%g,%g,%g,%g,%g,%g,%i", film,
                   100 * strength, 100 * brightness, 100 * contrast, 100 * gamma, 100 * hue, 100 * saturation,
                   normalize_colors);
     return ret;
@@ -685,8 +720,7 @@ struct dt_iop_gmic_custom_film_emulation_params_t : public parameter_interface
   {
     dt_iop_gmic_custom_film_emulation_params_t p;
     if(other.filter == custom_film_emulation
-       and std::sscanf(other.parameters,
-                       "fx_emulate_film_userdefined 2,\"%1023[^\"]\",%g,%g,%g,%g,%g,%g,%i,0,50,50",
+       and std::sscanf(other.parameters, "dt_custom_film_emulation 2,\"%1023[^\"]\",%g,%g,%g,%g,%g,%g,%i,0,50,50",
                        reinterpret_cast<char *>(&p.film), &p.strength, &p.brightness, &p.contrast, &p.gamma,
                        &p.hue, &p.saturation, &p.normalize_colors)
                == 8)
@@ -708,7 +742,7 @@ struct dt_iop_gmic_custom_film_emulation_params_t : public parameter_interface
     ret.filter = custom_film_emulation;
     if(std::strlen(film) > 0 and (not film_maps.empty()))
       std::snprintf(ret.parameters, sizeof(ret.parameters),
-                    "fx_emulate_film_userdefined 2,\"%s\",%g,%g,%g,%g,%g,%g,%i,0,50,50", film, 100 * strength,
+                    "dt_custom_film_emulation 2,\"%s\",%g,%g,%g,%g,%g,%g,%i,0,50,50", film, 100 * strength,
                     100 * brightness, 100 * contrast, 100 * gamma, 100 * hue, 100 * saturation, normalize_colors);
     return ret;
   }
@@ -771,7 +805,7 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
 {
   filter_type filter{ sharpen_Richardson_Lucy };
   float sigma{ 1.f };
-  int iterations{ 10 }, blur{ 1 };
+  int iterations{ 10 }, blur{ 1 }, channel{ 11 };
 
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t() = default;
 
@@ -780,11 +814,14 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
   {
     dt_iop_gmic_sharpen_Richardson_Lucy_params_t p;
     if(other.filter == sharpen_Richardson_Lucy
-       and std::sscanf(other.parameters, "deblur_richardsonlucy %g,%d,%d", &p.sigma, &p.iterations, &p.blur) == 3)
+       and std::sscanf(other.parameters, "dt_sharpen_Richardson_Lucy %g,%d,%d,%d", &p.sigma, &p.iterations,
+                       &p.blur, &p.channel)
+               == 4)
     {
       p.sigma = clamp(0.5f, 10.f, p.sigma);
       p.iterations = clamp(1, 100, p.iterations);
       p.blur = clamp(0, 1, p.blur);
+      p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
       *this = p;
     }
   }
@@ -793,8 +830,8 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
   {
     dt_iop_gmic_params_t ret;
     ret.filter = sharpen_Richardson_Lucy;
-    std::snprintf(ret.parameters, sizeof(ret.parameters), "deblur_richardsonlucy %g,%d,%d", sigma, iterations,
-                  blur);
+    std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_sharpen_Richardson_Lucy %g,%d,%d,%d", sigma,
+                  iterations, blur, channel);
     return ret;
   }
 
@@ -805,12 +842,13 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
   static void sigma_callback(GtkWidget *w, dt_iop_module_t *self);
   static void iterations_callback(GtkWidget *w, dt_iop_module_t *self);
   static void blur_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
 };
 
 struct dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t
 {
   GtkWidget *box;
-  GtkWidget *sigma, *iterations, *blur;
+  GtkWidget *sigma, *iterations, *blur, *channel;
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t parameters;
 };
 
@@ -1561,6 +1599,14 @@ void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::gui_init(dt_iop_module_t *sel
   g_signal_connect(G_OBJECT(g->sharpen_Richardson_Lucy.blur), "value-changed",
                    G_CALLBACK(dt_iop_gmic_sharpen_Richardson_Lucy_params_t::blur_callback), self);
 
+  g->sharpen_Richardson_Lucy.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->sharpen_Richardson_Lucy.channel, str);
+  dt_bauhaus_widget_set_label(g->sharpen_Richardson_Lucy.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->sharpen_Richardson_Lucy.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->sharpen_Richardson_Lucy.box), g->sharpen_Richardson_Lucy.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->sharpen_Richardson_Lucy.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_sharpen_Richardson_Lucy_params_t::channel_callback), self);
+
   gtk_widget_show_all(g->sharpen_Richardson_Lucy.box);
   gtk_widget_set_no_show_all(g->sharpen_Richardson_Lucy.box, TRUE);
   gtk_widget_set_visible(g->sharpen_Richardson_Lucy.box, p->filter == sharpen_Richardson_Lucy ? TRUE : FALSE);
@@ -1577,6 +1623,7 @@ void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::gui_update(dt_iop_module_t *s
     dt_bauhaus_slider_set(g->sharpen_Richardson_Lucy.sigma, g->sharpen_Richardson_Lucy.parameters.sigma);
     dt_bauhaus_slider_set(g->sharpen_Richardson_Lucy.iterations, g->sharpen_Richardson_Lucy.parameters.iterations);
     dt_bauhaus_combobox_set(g->sharpen_Richardson_Lucy.blur, g->sharpen_Richardson_Lucy.parameters.blur);
+    dt_bauhaus_combobox_set(g->sharpen_Richardson_Lucy.channel, g->sharpen_Richardson_Lucy.parameters.channel);
   }
 }
 
@@ -1611,6 +1658,16 @@ void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::blur_callback(GtkWidget *w, d
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   g->sharpen_Richardson_Lucy.parameters.blur = dt_bauhaus_combobox_get(w);
+  *p = g->sharpen_Richardson_Lucy.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_sharpen_Richardson_Lucy_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->sharpen_Richardson_Lucy.parameters.channel = dt_bauhaus_combobox_get(w);
   *p = g->sharpen_Richardson_Lucy.parameters.to_gmic_params();
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
@@ -1662,6 +1719,51 @@ extern "C" void gui_cleanup(dt_iop_module_t *self)
 extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                         void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
+  const char gmic_custom_commands[] = R "raw(
+      dt_sepia : sepia adjust_colors $1,
+             $2, $3, 0, 0, 0,
+             255
+
+      dt_film_emulation : if $1 clut "$2" repeat
+  {
+    $ ! - 1
+  }
+  if
+  {
+    $9 % 2
+  }
+  balance_gamma[$ > ], fi if { $3 < 100 } + map_clut[$ > ].j[$ > ]., 0, 0, 0, 0,
+      { $3 % } rm.else map_clut[$ > ].fi done rm.fi adjust_colors ${ 4 - 8 }, 0,
+      255 if { $9 > 1 } repeat $ !l[$ > ] split_opacity n[0] 0,
+      255 a c endl done fi
+
+          dt_custom_film_emulation : skip "${2=}" if
+  {
+    $1 < 2
+  }
+  if
+  {
+    $ ! < 2
+  } gui_warning_preview "Input layer with HaldCLUT is missing" return fi
+    ind={if($1,-1,0)} map_clut[^$ind] [$ind] rm[$ind]
+  else
+    l
+      0 nm. "$2" ext={x} rm.
+      if {['$ext']=='cube'} input_cube "$2"
+      else i "$2"
+      fi
+    onfail gui_warning_preview "Specified HaldCLUT filename not found" return
+    endl
+    map_clut[^-1] . rm.
+    if {iM>255} / 255 fi # Was possibly a 16bits HaldCLUT.
+  fi
+  _fx_emulate_film 0,1,${3--1}
+
+dt_sharpen_Richardson_Lucy :
+  ac "apply_parallel_overlap \"deblur_richardsonlucy $1,$2,$3\",24,0",$4,0
+
+)raw";
+
   const std::size_t ch = piece->colors;
   const std::size_t width = roi_in->width;
   const std::size_t height = roi_in->height;
@@ -1682,8 +1784,8 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
   try
   {
     dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(piece->data);
-    std::cerr << "### G'MIC :" << p->parameters << std::endl;
-    gmic(p->parameters, image_list, image_names);
+    std::cerr << "### G'MIC : " << p->parameters << std::endl;
+    gmic(p->parameters, image_list, image_names, gmic_custom_commands);
   }
   catch(gmic_exception &e)
   {
