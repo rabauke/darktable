@@ -51,7 +51,7 @@ enum filter_type
   sepia,
   film_emulation,
   custom_film_emulation,
-  sharpen_unsharp_mask,
+  freaky_details,
   sharpen_Richardson_Lucy,
   sharpen_Gold_Meinel,
   sharpen_inverse_diffusion
@@ -229,7 +229,34 @@ struct dt_iop_gmic_custom_film_emulation_gui_data_t
   dt_iop_gmic_custom_film_emulation_params_t parameters;
 };
 
-// --- sharpen unsharp mask
+// --- freaky details
+
+struct dt_iop_gmic_freaky_details_params_t : public parameter_interface
+{
+  filter_type filter{ freaky_details };
+  int amplitude{ 2 };
+  float scale{ 10.f };
+  int iterations{ 1 }, channel{ 11 };
+  dt_iop_gmic_freaky_details_params_t() = default;
+  dt_iop_gmic_freaky_details_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void amplitude_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void iterations_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_freaky_details_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *ampltude, *scale, *iterations, *channel;
+  dt_iop_gmic_freaky_details_params_t parameters;
+};
 
 // --- sharpen Richardson Lucy
 
@@ -239,11 +266,8 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
   float sigma{ 1.f };
   int iterations{ 10 }, blur{ 1 }, channel{ 11 };
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t() = default;
-
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t(const dt_iop_gmic_params_t &other);
-
   dt_iop_gmic_params_t to_gmic_params() const override;
-
   static const char *get_custom_command();
   filter_type get_filter() const override;
   void gui_init(dt_iop_module_t *self) const override;
@@ -338,6 +362,7 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_sepia_gui_data_t sepia;
   dt_iop_gmic_film_emulation_gui_data_t film_emulation;
   dt_iop_gmic_custom_film_emulation_gui_data_t custom_film_emulation;
+  dt_iop_gmic_freaky_details_gui_data_t freaky_details;
   dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t sharpen_Richardson_Lucy;
   dt_iop_gmic_sharpen_Gold_Meinel_gui_data_t sharpen_Gold_Meinel;
   dt_iop_gmic_sharpen_inverse_diffusion_gui_data_t sharpen_inverse_diffusion;
@@ -345,6 +370,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &sharpen_Richardson_Lucy.parameters,
                                                         &sharpen_Gold_Meinel.parameters,
                                                         &sharpen_inverse_diffusion.parameters,
+                                                        &freaky_details.parameters,
                                                         &sepia.parameters,
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
@@ -464,6 +490,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_sepia_params_t::get_custom_command();
     res += dt_iop_gmic_film_emulation_params_t::get_custom_command();
     res += dt_iop_gmic_custom_film_emulation_params_t::get_custom_command();
+    res += dt_iop_gmic_freaky_details_params_t::get_custom_command();
     res += dt_iop_gmic_sharpen_Richardson_Lucy_params_t::get_custom_command();
     res += dt_iop_gmic_sharpen_Gold_Meinel_params_t::get_custom_command();
     res += dt_iop_gmic_sharpen_inverse_diffusion_params_t::get_custom_command();
@@ -1773,7 +1800,165 @@ const std::vector<film_map> dt_iop_gmic_custom_film_emulation_params_t::film_map
   return map;
 }() };
 
-// --- sharpen unsharp mask
+// --- freaky details
+
+dt_iop_gmic_freaky_details_params_t::dt_iop_gmic_freaky_details_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_freaky_details_params_t()
+{
+  dt_iop_gmic_freaky_details_params_t p;
+  if(other.filter == freaky_details
+     and std::sscanf(other.parameters, "dt_freaky_details %d,%g,%d,%d", &p.amplitude, &p.scale, &p.iterations,
+                     &p.channel)
+             == 4)
+  {
+    p.amplitude = clamp(1, 5, p.amplitude);
+    p.scale = clamp(1.f, 100.f, p.scale);
+    p.iterations = clamp(1, 4, p.iterations);
+    p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_freaky_details_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = freaky_details;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_freaky_details %d,%g,%d,%d", amplitude, scale,
+                iterations, channel);
+  return ret;
+}
+
+const char *dt_iop_gmic_freaky_details_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+_dt_freaky_details :
+  repeat $! l[$>]
+    repeat $3
+      . +-. 255 *. -1
+      repeat $1 bilateral. $2,{1.5*$2} done
+      blend[-2,-1] vividlight blend overlay
+    done
+  endl done
+
+dt_freaky_details :
+  ac "_dt_freaky_details $1,$2,$3",$4,0
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_freaky_details_params_t::get_filter() const
+{
+  return freaky_details;
+}
+
+void dt_iop_gmic_freaky_details_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == freaky_details)
+    g->freaky_details.parameters = *p;
+  else
+    g->freaky_details.parameters = dt_iop_gmic_freaky_details_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("freaky details"));
+  g->freaky_details.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->freaky_details.box, TRUE, TRUE, 0);
+
+  g->freaky_details.ampltude
+      = dt_bauhaus_slider_new_with_range(self, 1, 5, 1, g->freaky_details.parameters.amplitude, 1);
+  dt_bauhaus_widget_set_label(g->freaky_details.ampltude, NULL, _("amplitude"));
+  gtk_widget_set_tooltip_text(g->freaky_details.ampltude, _("amplitude of the freaky details filter"));
+  gtk_box_pack_start(GTK_BOX(g->freaky_details.box), GTK_WIDGET(g->freaky_details.ampltude), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->freaky_details.ampltude), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_freaky_details_params_t::amplitude_callback), self);
+
+  g->freaky_details.scale
+      = dt_bauhaus_slider_new_with_range(self, 0, 100, 1, g->freaky_details.parameters.scale, 1);
+  dt_bauhaus_widget_set_label(g->freaky_details.scale, NULL, _("scale"));
+  gtk_widget_set_tooltip_text(g->freaky_details.scale, _("scale of the freaky details filter"));
+  gtk_box_pack_start(GTK_BOX(g->freaky_details.box), GTK_WIDGET(g->freaky_details.scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->freaky_details.scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_freaky_details_params_t::scale_callback), self);
+
+  g->freaky_details.iterations
+      = dt_bauhaus_slider_new_with_range(self, 1, 4, 1, g->freaky_details.parameters.iterations, 0);
+  dt_bauhaus_widget_set_label(g->freaky_details.iterations, NULL, _("iterations"));
+  gtk_widget_set_tooltip_text(g->freaky_details.iterations, _("number of iterations"));
+  gtk_box_pack_start(GTK_BOX(g->freaky_details.box), GTK_WIDGET(g->freaky_details.iterations), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->freaky_details.iterations), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_freaky_details_params_t::iterations_callback), self);
+
+  g->freaky_details.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->freaky_details.channel, str);
+  dt_bauhaus_widget_set_label(g->freaky_details.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->freaky_details.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->freaky_details.box), g->freaky_details.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->freaky_details.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_freaky_details_params_t::channel_callback), self);
+
+  gtk_widget_show_all(g->freaky_details.box);
+  gtk_widget_set_no_show_all(g->freaky_details.box, TRUE);
+  gtk_widget_set_visible(g->freaky_details.box, p->filter == freaky_details ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_freaky_details_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->freaky_details.box, p->filter == freaky_details ? TRUE : FALSE);
+  if(p->filter == freaky_details)
+  {
+    g->freaky_details.parameters = *p;
+    dt_bauhaus_slider_set(g->freaky_details.ampltude, g->freaky_details.parameters.amplitude);
+    dt_bauhaus_slider_set(g->freaky_details.scale, g->freaky_details.parameters.scale);
+    dt_bauhaus_slider_set(g->freaky_details.iterations, g->freaky_details.parameters.iterations);
+    dt_bauhaus_combobox_set(g->freaky_details.channel, g->freaky_details.parameters.channel);
+  }
+}
+
+void dt_iop_gmic_freaky_details_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_freaky_details_params_t();
+}
+
+void dt_iop_gmic_freaky_details_params_t::amplitude_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->freaky_details.parameters.amplitude = static_cast<int>(std::round(dt_bauhaus_slider_get(w)));
+  *p = g->freaky_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_freaky_details_params_t::scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->freaky_details.parameters.scale = dt_bauhaus_slider_get(w);
+  *p = g->freaky_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_freaky_details_params_t::iterations_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->freaky_details.parameters.iterations = static_cast<int>(std::round(dt_bauhaus_slider_get(w)));
+  *p = g->freaky_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_freaky_details_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->freaky_details.parameters.channel = dt_bauhaus_combobox_get(w);
+  *p = g->freaky_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
 
 // --- sharpen Richardson Lucy
 
