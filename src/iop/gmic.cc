@@ -375,6 +375,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
                                                         &expert_mode.parameters };
+  dt_pthread_mutex_t lock;
   dt_iop_gmic_gui_data_t() = default;
   dt_iop_gmic_gui_data_t(const dt_iop_gmic_gui_data_t &) = delete;
   void operator=(const dt_iop_gmic_gui_data_t &) = delete;
@@ -454,6 +455,8 @@ extern "C" void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
 
   for(const auto f : g->filter_list) f->gui_init(self);
+
+  dt_pthread_mutex_init(&g->lock, NULL);
 }
 
 extern "C" void gui_update(dt_iop_module_t *self)
@@ -475,6 +478,7 @@ extern "C" void gui_reset(dt_iop_module_t *self)
 extern "C" void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_pthread_mutex_destroy(&g->lock);
   delete g;
   self->gui_data = nullptr;
 }
@@ -514,9 +518,10 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
   in_img.move_to(image_list);
   cimg_library::CImgList<char> image_names;
   cimg_library::CImg<char>::string("input image").move_to(image_names);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(piece->data);
+  if(g != nullptr and p->filter == custom_film_emulation) dt_pthread_mutex_lock(&g->lock);
   try
   {
-    dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(piece->data);
     std::cerr << "### G'MIC : " << p->parameters << std::endl;
     gmic(p->parameters, image_list, image_names, gmic_custom_commands.c_str());
   }
@@ -525,6 +530,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL || piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
       dt_control_log("G'MIC error: %s", e.what());
   }
+  if(g != nullptr and p->filter == custom_film_emulation) dt_pthread_mutex_unlock(&g->lock);
   const cimg_library::CImg<float> &out_img(image_list[0]);
   auto ch_out_img = out_img._spectrum;
   for(std::size_t j = 0; j < std::min(height, static_cast<std::size_t>(out_img._height)); ++j)
@@ -1508,7 +1514,7 @@ dt_iop_gmic_custom_film_emulation_params_t::dt_iop_gmic_custom_film_emulation_pa
 {
   dt_iop_gmic_custom_film_emulation_params_t p;
   if(other.filter == custom_film_emulation
-     and std::sscanf(other.parameters, "dt_custom_film_emulation 2,\"%1023[^\"]\",%g,%g,%g,%g,%g,%g,%i,0,50,50",
+     and std::sscanf(other.parameters, "dt_custom_film_emulation 1,\"%1023[^\"]\",%g,%g,%g,%g,%g,%g,%i,0,50,50",
                      reinterpret_cast<char *>(&p.film), &p.strength, &p.brightness, &p.contrast, &p.gamma, &p.hue,
                      &p.saturation, &p.normalize_colors)
              == 8)
@@ -1530,7 +1536,7 @@ dt_iop_gmic_params_t dt_iop_gmic_custom_film_emulation_params_t::to_gmic_params(
   ret.filter = custom_film_emulation;
   if(std::strlen(film) > 0 and (not film_maps.empty()))
     std::snprintf(ret.parameters, sizeof(ret.parameters),
-                  "dt_custom_film_emulation 2,\"%s\",%g,%g,%g,%g,%g,%g,%i,0,50,50", film, 100 * strength,
+                  "dt_custom_film_emulation 1,\"%s\",%g,%g,%g,%g,%g,%g,%i,0,50,50", film, 100 * strength,
                   100 * brightness, 100 * contrast, 100 * gamma, 100 * hue, 100 * saturation, normalize_colors);
   return ret;
 }
@@ -1540,22 +1546,18 @@ const char *dt_iop_gmic_custom_film_emulation_params_t::get_custom_command()
   // clang-format off
   return R"raw(
 dt_custom_film_emulation :
-  skip "${2=}"
-  if {$1<2}
-    if {$!<2} gui_warning_preview "Input layer with HaldCLUT is missing" return fi
-    ind={if($1,-1,0)} map_clut[^$ind] [$ind] rm[$ind]
-  else
-    l
-      0 nm. "$2" ext={x} rm.
-      if {['$ext']=='cube'} input_cube "$2"
-      else i "$2"
+  if $1
+    input_cube "$2"
+    repeat {$!-1}
+      if {$9%2} balance_gamma[$>] , fi
+      if {$3<100} +map_clut[$>] . j[$>] .,0,0,0,0,{$3%} rm.
+      else map_clut[$>] .
       fi
-    onfail gui_warning_preview "Specified HaldCLUT filename not found" return
-    endl
-    map_clut[^-1] . rm.
-    if {iM>255} / 255 fi # Was possibly a 16bits HaldCLUT.
+    done
+    rm.
   fi
-  _fx_emulate_film 0,1,${3--1}
+  adjust_colors ${4-8},0,255
+  if {$9>1} repeat $! l[$>] split_opacity n[0] 0,255 a c endl done fi
 )raw";
   // clang-format on
 }
