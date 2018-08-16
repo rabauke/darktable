@@ -54,7 +54,8 @@ enum filter_type
   freaky_details,
   sharpen_Richardson_Lucy,
   sharpen_Gold_Meinel,
-  sharpen_inverse_diffusion
+  sharpen_inverse_diffusion,
+  magic_details
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -79,7 +80,7 @@ struct dt_iop_gmic_gui_data_t;
 
 struct dt_iop_gmic_none_params_t : public parameter_interface
 {
-  filter_type filter{ none };
+  static const filter_type filter{ none };
   dt_iop_gmic_none_params_t() = default;
   dt_iop_gmic_none_params_t(const dt_iop_gmic_params_t &);
   dt_iop_gmic_params_t to_gmic_params() const override;
@@ -99,7 +100,7 @@ struct dt_iop_gmic_none_gui_data_t
 
 struct dt_iop_gmic_expert_mode_params_t : public parameter_interface
 {
-  filter_type filter{ expert_mode };
+  static const filter_type filter{ expert_mode };
   char command[1024]{ "" };
   dt_iop_gmic_expert_mode_params_t() = default;
   dt_iop_gmic_expert_mode_params_t(const dt_iop_gmic_params_t &other);
@@ -123,7 +124,7 @@ struct dt_iop_gmic_expert_mode_gui_data_t
 
 struct dt_iop_gmic_sepia_params_t : public parameter_interface
 {
-  filter_type filter{ sepia };
+  static const filter_type filter{ sepia };
   float brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f };
   dt_iop_gmic_sepia_params_t() = default;
   dt_iop_gmic_sepia_params_t(const dt_iop_gmic_params_t &other);
@@ -163,7 +164,7 @@ struct film_map
 
 struct dt_iop_gmic_film_emulation_params_t : public parameter_interface
 {
-  filter_type filter{ film_emulation };
+  static const filter_type filter{ film_emulation };
   char film[128]{ "agfa_apx_25" };
   float strength{ 1.f }, brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
   int normalize_colors{ 0 };
@@ -198,7 +199,7 @@ struct dt_iop_gmic_film_emulation_gui_data_t
 
 struct dt_iop_gmic_custom_film_emulation_params_t : public parameter_interface
 {
-  filter_type filter{ custom_film_emulation };
+  static const filter_type filter{ custom_film_emulation };
   char film[1024]{ "" };
   float strength{ 1.f }, brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
   int normalize_colors{ 0 };
@@ -233,7 +234,7 @@ struct dt_iop_gmic_custom_film_emulation_gui_data_t
 
 struct dt_iop_gmic_freaky_details_params_t : public parameter_interface
 {
-  filter_type filter{ freaky_details };
+  static const filter_type filter{ freaky_details };
   int amplitude{ 2 };
   float scale{ 10.f };
   int iterations{ 1 }, channel{ 11 };
@@ -262,7 +263,7 @@ struct dt_iop_gmic_freaky_details_gui_data_t
 
 struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
 {
-  filter_type filter{ sharpen_Richardson_Lucy };
+  static const filter_type filter{ sharpen_Richardson_Lucy };
   float sigma{ 1.f };
   int iterations{ 10 }, blur{ 1 }, channel{ 11 };
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t() = default;
@@ -290,7 +291,7 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t
 
 struct dt_iop_gmic_sharpen_Gold_Meinel_params_t : public parameter_interface
 {
-  filter_type filter{ sharpen_Gold_Meinel };
+  static const filter_type filter{ sharpen_Gold_Meinel };
   float sigma{ 1.f };
   int iterations{ 5 };
   float acceleration{ 1.f };
@@ -321,7 +322,7 @@ struct dt_iop_gmic_sharpen_Gold_Meinel_gui_data_t
 
 struct dt_iop_gmic_sharpen_inverse_diffusion_params_t : public parameter_interface
 {
-  filter_type filter{ sharpen_inverse_diffusion };
+  static const filter_type filter{ sharpen_inverse_diffusion };
   float amplitude{ 50.f };
   int iterations{ 2 }, channel{ 11 };
   dt_iop_gmic_sharpen_inverse_diffusion_params_t() = default;
@@ -342,6 +343,40 @@ struct dt_iop_gmic_sharpen_inverse_diffusion_gui_data_t
   GtkWidget *box;
   GtkWidget *ampltude, *iterations, *channel;
   dt_iop_gmic_sharpen_inverse_diffusion_params_t parameters;
+};
+
+// --- magic details
+
+struct dt_iop_gmic_magic_details_params_t : public parameter_interface
+{
+  static const filter_type filter{ magic_details };
+  float amplitude{ 6.f };
+  float spatial_scale{ 3.f };
+  float value_scale{ 15.f };
+  float edges{ -0.5f };
+  float smoothness{ 2.f };
+  int channel{ 27 };
+  dt_iop_gmic_magic_details_params_t() = default;
+  dt_iop_gmic_magic_details_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void amplitude_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void spatial_scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void value_scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void edges_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void smoothness_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_magic_details_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *ampltude, *spatial_scale, *value_scale, *edges, *smoothness, *channel;
+  dt_iop_gmic_magic_details_params_t parameters;
 };
 
 //----------------------------------------------------------------------
@@ -366,11 +401,13 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t sharpen_Richardson_Lucy;
   dt_iop_gmic_sharpen_Gold_Meinel_gui_data_t sharpen_Gold_Meinel;
   dt_iop_gmic_sharpen_inverse_diffusion_gui_data_t sharpen_inverse_diffusion;
+  dt_iop_gmic_magic_details_gui_data_t magic_details;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
                                                         &sharpen_Gold_Meinel.parameters,
                                                         &sharpen_inverse_diffusion.parameters,
                                                         &freaky_details.parameters,
+                                                        &magic_details.parameters,
                                                         &sepia.parameters,
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
@@ -498,6 +535,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_sharpen_Richardson_Lucy_params_t::get_custom_command();
     res += dt_iop_gmic_sharpen_Gold_Meinel_params_t::get_custom_command();
     res += dt_iop_gmic_sharpen_inverse_diffusion_params_t::get_custom_command();
+    res += dt_iop_gmic_magic_details_params_t::get_custom_command();
     return res;
   }();
 
@@ -2425,6 +2463,206 @@ void dt_iop_gmic_sharpen_inverse_diffusion_params_t::channel_callback(GtkWidget 
   dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
   g->sharpen_inverse_diffusion.parameters.channel = dt_bauhaus_combobox_get(w);
   *p = g->sharpen_inverse_diffusion.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+// --- magic details
+
+dt_iop_gmic_magic_details_params_t::dt_iop_gmic_magic_details_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_magic_details_params_t()
+{
+  dt_iop_gmic_magic_details_params_t p;
+  if(other.filter == magic_details
+     and std::sscanf(other.parameters, "dt_magic_details %g,%g,%g,%g,%g,%d", &p.amplitude, &p.spatial_scale,
+                     &p.value_scale, &p.edges, &p.smoothness, &p.channel)
+             == 6)
+  {
+    p.amplitude = clamp(0.f, 30.f, p.amplitude);
+    p.spatial_scale = clamp(0.f, 10.f, p.spatial_scale);
+    p.value_scale = clamp(0.f, 20.f, p.value_scale);
+    p.edges = clamp(-3.0f, 3.0f, p.edges);
+    p.smoothness = clamp(0.f, 20.f, p.smoothness);
+    p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_magic_details_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = magic_details;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_magic_details %g,%g,%g,%g,%g,%d", amplitude,
+                spatial_scale, value_scale, edges, smoothness, channel);
+  return ret;
+}
+
+const char *dt_iop_gmic_magic_details_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+_dt_magic_details :
+  repeat $! l[$>]
+    +bilateral $2,$3
+    +gradient_norm.. +. 1
+    pow. {$4>=0?3.1-$4:-3.1-$4}
+    b. $5 n. 1,{1+$1}
+    -... .. *[-3,-1] + c 0,255
+  endl done
+
+dt_magic_details :
+  ac "_dt_magic_details ${1-5}",$6,0
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_magic_details_params_t::get_filter() const
+{
+  return magic_details;
+}
+
+void dt_iop_gmic_magic_details_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == magic_details)
+    g->magic_details.parameters = *p;
+  else
+    g->magic_details.parameters = dt_iop_gmic_magic_details_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("magic details"));
+  g->magic_details.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->magic_details.box, TRUE, TRUE, 0);
+
+  g->magic_details.ampltude
+      = dt_bauhaus_slider_new_with_range(self, 0, 30, 0.1, g->magic_details.parameters.amplitude, 1);
+  dt_bauhaus_widget_set_label(g->magic_details.ampltude, NULL, _("amplitude"));
+  gtk_widget_set_tooltip_text(g->magic_details.ampltude, _("amplitude of the magic details filter"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), GTK_WIDGET(g->magic_details.ampltude), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.ampltude), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::amplitude_callback), self);
+
+  g->magic_details.spatial_scale
+      = dt_bauhaus_slider_new_with_range(self, 0, 10, 0.1, g->magic_details.parameters.spatial_scale, 1);
+  dt_bauhaus_widget_set_label(g->magic_details.spatial_scale, NULL, _("spatial scale"));
+  gtk_widget_set_tooltip_text(g->magic_details.spatial_scale, _("spatial scale of the magic details filter"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), GTK_WIDGET(g->magic_details.spatial_scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.spatial_scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::spatial_scale_callback), self);
+
+  g->magic_details.value_scale
+      = dt_bauhaus_slider_new_with_range(self, 0, 20, 0.1, g->magic_details.parameters.value_scale, 1);
+  dt_bauhaus_widget_set_label(g->magic_details.value_scale, NULL, _("value scale"));
+  gtk_widget_set_tooltip_text(g->magic_details.value_scale, _("value scale of the magic details filter"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), GTK_WIDGET(g->magic_details.value_scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.value_scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::value_scale_callback), self);
+
+  g->magic_details.edges
+      = dt_bauhaus_slider_new_with_range(self, -3, 3, 0.1, g->magic_details.parameters.edges, 1);
+  dt_bauhaus_widget_set_label(g->magic_details.edges, NULL, _("edges"));
+  gtk_widget_set_tooltip_text(g->magic_details.edges, _("edges of the magic details filter"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), GTK_WIDGET(g->magic_details.edges), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.edges), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::edges_callback), self);
+
+  g->magic_details.smoothness
+      = dt_bauhaus_slider_new_with_range(self, 0, 20, 0.1, g->magic_details.parameters.smoothness, 1);
+  dt_bauhaus_widget_set_label(g->magic_details.smoothness, NULL, _("smoothness"));
+  gtk_widget_set_tooltip_text(g->magic_details.smoothness, _("smoothness of the magic details filter"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), GTK_WIDGET(g->magic_details.smoothness), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.smoothness), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::smoothness_callback), self);
+
+  g->magic_details.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->magic_details.channel, str);
+  dt_bauhaus_widget_set_label(g->magic_details.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->magic_details.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->magic_details.box), g->magic_details.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->magic_details.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_magic_details_params_t::channel_callback), self);
+
+  gtk_widget_show_all(g->magic_details.box);
+  gtk_widget_set_no_show_all(g->magic_details.box, TRUE);
+  gtk_widget_set_visible(g->magic_details.box, p->filter == magic_details ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_magic_details_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->magic_details.box, p->filter == magic_details ? TRUE : FALSE);
+  if(p->filter == magic_details)
+  {
+    g->magic_details.parameters = *p;
+    dt_bauhaus_slider_set(g->magic_details.ampltude, g->magic_details.parameters.amplitude);
+    dt_bauhaus_slider_set(g->magic_details.spatial_scale, g->magic_details.parameters.spatial_scale);
+    dt_bauhaus_slider_set(g->magic_details.value_scale, g->magic_details.parameters.value_scale);
+    dt_bauhaus_slider_set(g->magic_details.edges, g->magic_details.parameters.edges);
+    dt_bauhaus_slider_set(g->magic_details.smoothness, g->magic_details.parameters.smoothness);
+    dt_bauhaus_combobox_set(g->magic_details.channel, g->magic_details.parameters.channel);
+  }
+}
+
+void dt_iop_gmic_magic_details_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_magic_details_params_t();
+}
+
+void dt_iop_gmic_magic_details_params_t::amplitude_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.amplitude = dt_bauhaus_slider_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_magic_details_params_t::spatial_scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.spatial_scale = dt_bauhaus_slider_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_magic_details_params_t::value_scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.value_scale = dt_bauhaus_slider_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_magic_details_params_t::edges_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.edges = dt_bauhaus_slider_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_magic_details_params_t::smoothness_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.smoothness = dt_bauhaus_slider_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+void dt_iop_gmic_magic_details_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  g->magic_details.parameters.channel = dt_bauhaus_combobox_get(w);
+  *p = g->magic_details.parameters.to_gmic_params();
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
