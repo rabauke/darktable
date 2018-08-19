@@ -58,7 +58,8 @@ enum filter_type
   magic_details,
   basic_color_adjustments,
   equalize_shadow,
-  add_grain
+  add_grain,
+  pop_shadows
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -459,6 +460,31 @@ struct dt_iop_gmic_add_grain_gui_data_t
   dt_iop_gmic_add_grain_params_t parameters;
 };
 
+// --- pop shadows
+
+struct dt_iop_gmic_pop_shadows_params_t : public parameter_interface
+{
+  float strength{ 0.75f };
+  float scale{ 5.f };
+  dt_iop_gmic_pop_shadows_params_t() = default;
+  dt_iop_gmic_pop_shadows_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void strength_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void scale_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_pop_shadows_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *strength, *scale;
+  dt_iop_gmic_pop_shadows_params_t parameters;
+};
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -485,6 +511,7 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_basic_color_adjustments_gui_data_t basic_color_adjustments;
   dt_iop_gmic_equalize_shadow_gui_data_t equalize_shadow;
   dt_iop_gmic_add_grain_gui_data_t add_grain;
+  dt_iop_gmic_pop_shadows_gui_data_t pop_shadows;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
@@ -493,6 +520,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &freaky_details.parameters,
                                                         &magic_details.parameters,
                                                         &equalize_shadow.parameters,
+                                                        &pop_shadows.parameters,
                                                         &sepia.parameters,
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
@@ -625,6 +653,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_basic_color_adjustments_params_t::get_custom_command();
     res += dt_iop_gmic_equalize_shadow_params_t::get_custom_command();
     res += dt_iop_gmic_add_grain_params_t::get_custom_command();
+    res += dt_iop_gmic_pop_shadows_params_t::get_custom_command();
     return res;
   }();
 
@@ -742,6 +771,7 @@ static const std::vector<const char *> color_channels{ _("all"),
                                                        _("CMYK (key)"),
                                                        _("YIQ (luma)"),
                                                        _("YIQ (chromas)") };
+
 
 void filter_callback(GtkWidget *w, dt_iop_module_t *self)
 {
@@ -3175,6 +3205,115 @@ void dt_iop_gmic_add_grain_params_t::saturation_callback(GtkWidget *w, dt_iop_mo
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->add_grain.parameters.saturation = dt_bauhaus_slider_get(W);
     return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+// --- pop shadows
+
+dt_iop_gmic_pop_shadows_params_t::dt_iop_gmic_pop_shadows_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_pop_shadows_params_t()
+{
+  dt_iop_gmic_pop_shadows_params_t p;
+  if(other.filter == pop_shadows
+     and std::sscanf(other.parameters, "dt_pop_shadows %g,%g", &p.strength, &p.scale) == 2)
+  {
+    p.strength = clamp(0.f, 1.f, p.strength);
+    p.scale = clamp(0.f, 20.f, p.scale);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_pop_shadows_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = pop_shadows;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_pop_shadows %g,%g", strength, scale);
+  return ret;
+}
+
+const char *dt_iop_gmic_pop_shadows_params_t::get_custom_command()
+{
+  // clang-format off
+  return R"raw(
+dt_pop_shadows :
+  split_opacity local[0]
+    .x2
+    luminance.. negate.. imM={-2,[im,iM]} blur.. $2% normalize.. $imM
+    blend[0,1] overlay,$1
+    max
+  endlocal
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_pop_shadows_params_t::get_filter() const
+{
+  return pop_shadows;
+}
+
+void dt_iop_gmic_pop_shadows_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == pop_shadows)
+    g->pop_shadows.parameters = *p;
+  else
+    g->pop_shadows.parameters = dt_iop_gmic_pop_shadows_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("pop shadows"));
+  g->pop_shadows.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->pop_shadows.box, TRUE, TRUE, 0);
+
+  g->pop_shadows.strength
+      = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->pop_shadows.parameters.strength, 3);
+  dt_bauhaus_widget_set_label(g->pop_shadows.strength, NULL, _("strength"));
+  gtk_widget_set_tooltip_text(g->pop_shadows.strength, _("strength of shadow brightening"));
+  gtk_box_pack_start(GTK_BOX(g->pop_shadows.box), GTK_WIDGET(g->pop_shadows.strength), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->pop_shadows.strength), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_pop_shadows_params_t::strength_callback), self);
+
+  g->pop_shadows.scale = dt_bauhaus_slider_new_with_range(self, 0, 20, 0.01, g->pop_shadows.parameters.scale, 3);
+  dt_bauhaus_widget_set_label(g->pop_shadows.scale, NULL, _("scale"));
+  gtk_widget_set_tooltip_text(g->pop_shadows.scale, _("scale of blur used in shadow brightening"));
+  gtk_box_pack_start(GTK_BOX(g->pop_shadows.box), GTK_WIDGET(g->pop_shadows.scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->pop_shadows.scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_pop_shadows_params_t::scale_callback), self);
+
+  gtk_widget_show_all(g->pop_shadows.box);
+  gtk_widget_set_no_show_all(g->pop_shadows.box, TRUE);
+  gtk_widget_set_visible(g->pop_shadows.box, p->filter == pop_shadows ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_pop_shadows_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->pop_shadows.box, p->filter == pop_shadows ? TRUE : FALSE);
+  if(p->filter == pop_shadows)
+  {
+    g->pop_shadows.parameters = *p;
+    dt_bauhaus_slider_set(g->pop_shadows.strength, g->pop_shadows.parameters.strength);
+    dt_bauhaus_slider_set(g->pop_shadows.scale, g->pop_shadows.parameters.scale);
+  }
+}
+
+void dt_iop_gmic_pop_shadows_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_pop_shadows_params_t();
+}
+
+void dt_iop_gmic_pop_shadows_params_t::strength_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->pop_shadows.parameters.strength = dt_bauhaus_slider_get(W);
+    return G->pop_shadows.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_pop_shadows_params_t::scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->pop_shadows.parameters.scale = dt_bauhaus_slider_get(W);
+    return G->pop_shadows.parameters.to_gmic_params();
   });
 }
 
