@@ -57,7 +57,8 @@ enum filter_type
   sharpen_inverse_diffusion,
   magic_details,
   basic_color_adjustments,
-  equalize_shadow
+  equalize_shadow,
+  add_grain
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -82,7 +83,6 @@ struct dt_iop_gmic_gui_data_t;
 
 struct dt_iop_gmic_none_params_t : public parameter_interface
 {
-  static const filter_type filter{ none };
   dt_iop_gmic_none_params_t() = default;
   dt_iop_gmic_none_params_t(const dt_iop_gmic_params_t &);
   dt_iop_gmic_params_t to_gmic_params() const override;
@@ -102,7 +102,6 @@ struct dt_iop_gmic_none_gui_data_t
 
 struct dt_iop_gmic_expert_mode_params_t : public parameter_interface
 {
-  static const filter_type filter{ expert_mode };
   char command[1024]{ "" };
   dt_iop_gmic_expert_mode_params_t() = default;
   dt_iop_gmic_expert_mode_params_t(const dt_iop_gmic_params_t &other);
@@ -126,7 +125,6 @@ struct dt_iop_gmic_expert_mode_gui_data_t
 
 struct dt_iop_gmic_sepia_params_t : public parameter_interface
 {
-  static const filter_type filter{ sepia };
   float brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f };
   dt_iop_gmic_sepia_params_t() = default;
   dt_iop_gmic_sepia_params_t(const dt_iop_gmic_params_t &other);
@@ -166,7 +164,6 @@ struct film_map
 
 struct dt_iop_gmic_film_emulation_params_t : public parameter_interface
 {
-  static const filter_type filter{ film_emulation };
   char film[128]{ "agfa_apx_25" };
   float strength{ 1.f }, brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
   int normalize_colors{ 0 };
@@ -201,7 +198,6 @@ struct dt_iop_gmic_film_emulation_gui_data_t
 
 struct dt_iop_gmic_custom_film_emulation_params_t : public parameter_interface
 {
-  static const filter_type filter{ custom_film_emulation };
   char film[1024]{ "" };
   float strength{ 1.f }, brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
   int normalize_colors{ 0 };
@@ -236,7 +232,6 @@ struct dt_iop_gmic_custom_film_emulation_gui_data_t
 
 struct dt_iop_gmic_freaky_details_params_t : public parameter_interface
 {
-  static const filter_type filter{ freaky_details };
   int amplitude{ 2 };
   float scale{ 10.f };
   int iterations{ 1 }, channel{ 11 };
@@ -265,7 +260,6 @@ struct dt_iop_gmic_freaky_details_gui_data_t
 
 struct dt_iop_gmic_sharpen_Richardson_Lucy_params_t : public parameter_interface
 {
-  static const filter_type filter{ sharpen_Richardson_Lucy };
   float sigma{ 1.f };
   int iterations{ 10 }, blur{ 1 }, channel{ 11 };
   dt_iop_gmic_sharpen_Richardson_Lucy_params_t() = default;
@@ -293,7 +287,6 @@ struct dt_iop_gmic_sharpen_Richardson_Lucy_gui_data_t
 
 struct dt_iop_gmic_sharpen_Gold_Meinel_params_t : public parameter_interface
 {
-  static const filter_type filter{ sharpen_Gold_Meinel };
   float sigma{ 1.f };
   int iterations{ 5 };
   float acceleration{ 1.f };
@@ -324,7 +317,6 @@ struct dt_iop_gmic_sharpen_Gold_Meinel_gui_data_t
 
 struct dt_iop_gmic_sharpen_inverse_diffusion_params_t : public parameter_interface
 {
-  static const filter_type filter{ sharpen_inverse_diffusion };
   float amplitude{ 50.f };
   int iterations{ 2 }, channel{ 11 };
   dt_iop_gmic_sharpen_inverse_diffusion_params_t() = default;
@@ -351,7 +343,6 @@ struct dt_iop_gmic_sharpen_inverse_diffusion_gui_data_t
 
 struct dt_iop_gmic_magic_details_params_t : public parameter_interface
 {
-  static const filter_type filter{ magic_details };
   float amplitude{ 6.f };
   float spatial_scale{ 3.f };
   float value_scale{ 15.f };
@@ -385,7 +376,6 @@ struct dt_iop_gmic_magic_details_gui_data_t
 
 struct dt_iop_gmic_basic_color_adjustments_params_t : public parameter_interface
 {
-  static const filter_type filter{ basic_color_adjustments };
   float brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
   dt_iop_gmic_basic_color_adjustments_params_t() = default;
   dt_iop_gmic_basic_color_adjustments_params_t(const dt_iop_gmic_params_t &other);
@@ -414,7 +404,6 @@ struct dt_iop_gmic_basic_color_adjustments_gui_data_t
 
 struct dt_iop_gmic_equalize_shadow_params_t : public parameter_interface
 {
-  static const filter_type filter{ equalize_shadow };
   float amplitude{ 1.f };
   dt_iop_gmic_equalize_shadow_params_t() = default;
   dt_iop_gmic_equalize_shadow_params_t(const dt_iop_gmic_params_t &other);
@@ -432,6 +421,42 @@ struct dt_iop_gmic_equalize_shadow_gui_data_t
   GtkWidget *box;
   GtkWidget *amplitude;
   dt_iop_gmic_equalize_shadow_params_t parameters;
+};
+
+// --- add grain
+
+struct dt_iop_gmic_add_grain_params_t : public parameter_interface
+{
+  int preset{ 0 }, blend_mode{ 1 };
+  float opacity{ 0.2f }, scale{ 100.f };
+  int color_grain{ 0 };
+  float brightness{ 0.f }, contrast{ 0.f }, gamma{ 0.f }, hue{ 0.f }, saturation{ 0.f };
+  dt_iop_gmic_add_grain_params_t() = default;
+  dt_iop_gmic_add_grain_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void preset_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void blend_mode_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void opacity_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void color_grain_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void brightness_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void contrast_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void gamma_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void hue_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void saturation_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_add_grain_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *preset, *blend_mode, *opacity, *scale, *color_grain, *brightness, *contrast, *gamma, *hue,
+      *saturation;
+  dt_iop_gmic_add_grain_params_t parameters;
 };
 
 //----------------------------------------------------------------------
@@ -459,6 +484,7 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_magic_details_gui_data_t magic_details;
   dt_iop_gmic_basic_color_adjustments_gui_data_t basic_color_adjustments;
   dt_iop_gmic_equalize_shadow_gui_data_t equalize_shadow;
+  dt_iop_gmic_add_grain_gui_data_t add_grain;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
@@ -470,6 +496,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &sepia.parameters,
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
+                                                        &add_grain.parameters,
                                                         &expert_mode.parameters };
   dt_pthread_mutex_t lock;
   dt_iop_gmic_gui_data_t() = default;
@@ -597,6 +624,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_magic_details_params_t::get_custom_command();
     res += dt_iop_gmic_basic_color_adjustments_params_t::get_custom_command();
     res += dt_iop_gmic_equalize_shadow_params_t::get_custom_command();
+    res += dt_iop_gmic_add_grain_params_t::get_custom_command();
     return res;
   }();
 
@@ -2897,6 +2925,256 @@ void dt_iop_gmic_equalize_shadow_params_t::amplitude_callback(GtkWidget *w, dt_i
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->equalize_shadow.parameters.amplitude = dt_bauhaus_slider_get(W);
     return G->equalize_shadow.parameters.to_gmic_params();
+  });
+}
+
+// --- add grain
+
+dt_iop_gmic_add_grain_params_t::dt_iop_gmic_add_grain_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_add_grain_params_t()
+{
+  dt_iop_gmic_add_grain_params_t p;
+  if(other.filter == add_grain
+     and std::sscanf(other.parameters, "dt_add_grain %d,%d,%g,%g,%d,%g,%g,%g,%g,%g", &p.preset, &p.blend_mode,
+                     &p.opacity, &p.scale, &p.color_grain, &p.brightness, &p.contrast, &p.gamma, &p.hue,
+                     &p.saturation)
+             == 10)
+  {
+    p.preset = clamp(0, 4, p.preset);
+    p.blend_mode = clamp(0, 5, p.blend_mode);
+    p.opacity = clamp(0.f, 1.f, p.opacity);
+    p.scale = clamp(30.f, 100.f, p.scale);
+    p.color_grain = clamp(0, 1, p.color_grain);
+    p.brightness = clamp(-1.f, 1.f, p.brightness);
+    p.contrast = clamp(-1.f, 1.f, p.contrast);
+    p.gamma = clamp(-1.f, 1.f, p.gamma);
+    p.hue = clamp(-1.f, 1.f, p.hue);
+    p.saturation = clamp(-1.f, 1.f, p.saturation);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_add_grain_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = add_grain;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_add_grain %d,%d,%g,%g,%d,%g,%g,%g,%g,%g", preset,
+                blend_mode, opacity, scale, color_grain, brightness, contrast, gamma, hue, saturation);
+  return ret;
+}
+
+const char *dt_iop_gmic_add_grain_params_t::get_custom_command()
+{
+  // clang-format off
+  return R"raw(
+dt_add_grain :
+  fx_emulate_grain $1,$2,$3,$4,$5,{100*$6},{100*$7},{100*$8},{100*$9},{100*$10}
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_add_grain_params_t::get_filter() const
+{
+  return add_grain;
+}
+
+void dt_iop_gmic_add_grain_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == add_grain)
+    g->add_grain.parameters = *p;
+  else
+    g->add_grain.parameters = dt_iop_gmic_add_grain_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("add film grain"));
+  g->add_grain.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->add_grain.box, TRUE, TRUE, 0);
+
+  g->add_grain.preset = dt_bauhaus_combobox_new(self);
+  for(auto i : { _("ORWO NP20"), _("Kodak TMAX 400"), _("Kodak TMAX 3200"), _("Kodak TRI-X 1600"), _("Unknown") })
+    dt_bauhaus_combobox_add(g->add_grain.preset, i);
+  dt_bauhaus_widget_set_label(g->add_grain.preset, NULL, _("grain preset"));
+  gtk_widget_set_tooltip_text(g->add_grain.preset, _("emulate grain of given film type"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), g->add_grain.preset, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.preset), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::preset_callback), self);
+
+  g->add_grain.blend_mode = dt_bauhaus_combobox_new(self);
+  for(auto i : { _("alpha"), _("grain merge"), _("hard light"), _("overlay"), _("soft light"), _("grain only") })
+    dt_bauhaus_combobox_add(g->add_grain.blend_mode, i);
+  dt_bauhaus_widget_set_label(g->add_grain.blend_mode, NULL, _("blend mode"));
+  gtk_widget_set_tooltip_text(g->add_grain.blend_mode, _("how to blend grain into picture"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), g->add_grain.blend_mode, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.blend_mode), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::blend_mode_callback), self);
+
+  g->add_grain.opacity = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->add_grain.parameters.opacity, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.opacity, NULL, _("opacity"));
+  gtk_widget_set_tooltip_text(g->add_grain.opacity, _("grain opacity"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.opacity), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.opacity), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::opacity_callback), self);
+
+  g->add_grain.scale = dt_bauhaus_slider_new_with_range(self, 30, 200, 1, g->add_grain.parameters.scale, 1);
+  dt_bauhaus_widget_set_label(g->add_grain.scale, NULL, _("scale"));
+  gtk_widget_set_tooltip_text(g->add_grain.scale, _("grain scale"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::scale_callback), self);
+
+  g->add_grain.color_grain = dt_bauhaus_combobox_new(self);
+  for(auto i : { _("monochrome grain"), _("color grain") }) dt_bauhaus_combobox_add(g->add_grain.color_grain, i);
+  dt_bauhaus_widget_set_label(g->add_grain.color_grain, NULL, _("grain type"));
+  gtk_widget_set_tooltip_text(g->add_grain.color_grain, _("select monochromatic or color grain"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), g->add_grain.color_grain, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.color_grain), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::color_grain_callback), self);
+
+  g->add_grain.brightness
+      = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->add_grain.parameters.brightness, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.brightness, NULL, _("brightness"));
+  gtk_widget_set_tooltip_text(g->add_grain.brightness, _("brightness adjustment"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.brightness), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.brightness), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::brightness_callback), self);
+
+  g->add_grain.contrast = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->add_grain.parameters.contrast, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.contrast, NULL, _("contrast"));
+  gtk_widget_set_tooltip_text(g->add_grain.contrast, _("contrast adjustment"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.contrast), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.contrast), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::contrast_callback), self);
+
+  g->add_grain.gamma = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->add_grain.parameters.gamma, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.gamma, NULL, _("gamma"));
+  gtk_widget_set_tooltip_text(g->add_grain.gamma, _("gamma adjustment"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.gamma), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.gamma), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::gamma_callback), self);
+
+  g->add_grain.hue = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->add_grain.parameters.hue, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.hue, NULL, _("hue"));
+  gtk_widget_set_tooltip_text(g->add_grain.hue, _("hue shift"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.hue), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.hue), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::hue_callback), self);
+
+  g->add_grain.saturation
+      = dt_bauhaus_slider_new_with_range(self, -1, 1, 0.01, g->add_grain.parameters.saturation, 3);
+  dt_bauhaus_widget_set_label(g->add_grain.saturation, NULL, _("saturation"));
+  gtk_widget_set_tooltip_text(g->add_grain.saturation, _("saturation adjustment"));
+  gtk_box_pack_start(GTK_BOX(g->add_grain.box), GTK_WIDGET(g->add_grain.saturation), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->add_grain.saturation), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_add_grain_params_t::saturation_callback), self);
+
+  gtk_widget_show_all(g->add_grain.box);
+  gtk_widget_set_no_show_all(g->add_grain.box, TRUE);
+  gtk_widget_set_visible(g->add_grain.box, p->filter == add_grain ? TRUE : FALSE);
+};
+
+void dt_iop_gmic_add_grain_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->add_grain.box, p->filter == add_grain ? TRUE : FALSE);
+  if(p->filter == add_grain)
+  {
+    g->add_grain.parameters = *p;
+    dt_bauhaus_combobox_set(g->add_grain.preset, g->add_grain.parameters.preset);
+    dt_bauhaus_combobox_set(g->add_grain.blend_mode, g->add_grain.parameters.blend_mode);
+    dt_bauhaus_slider_set(g->add_grain.opacity, g->add_grain.parameters.opacity);
+    dt_bauhaus_slider_set(g->add_grain.scale, g->add_grain.parameters.scale);
+    dt_bauhaus_combobox_set(g->add_grain.color_grain, g->add_grain.parameters.color_grain);
+    dt_bauhaus_slider_set(g->add_grain.brightness, g->add_grain.parameters.brightness);
+    dt_bauhaus_slider_set(g->add_grain.contrast, g->add_grain.parameters.contrast);
+    dt_bauhaus_slider_set(g->add_grain.gamma, g->add_grain.parameters.gamma);
+    dt_bauhaus_slider_set(g->add_grain.hue, g->add_grain.parameters.hue);
+    dt_bauhaus_slider_set(g->add_grain.saturation, g->add_grain.parameters.saturation);
+  }
+}
+
+void dt_iop_gmic_add_grain_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_add_grain_params_t();
+}
+
+void dt_iop_gmic_add_grain_params_t::preset_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.preset = dt_bauhaus_combobox_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::blend_mode_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.blend_mode = dt_bauhaus_combobox_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::opacity_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.opacity = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.scale = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::color_grain_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.color_grain = dt_bauhaus_combobox_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::brightness_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.brightness = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::contrast_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.contrast = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::gamma_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.gamma = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::hue_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.hue = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_add_grain_params_t::saturation_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->add_grain.parameters.saturation = dt_bauhaus_slider_get(W);
+    return G->add_grain.parameters.to_gmic_params();
   });
 }
 
