@@ -516,6 +516,35 @@ struct dt_iop_gmic_smooth_bilateral_gui_data_t
   dt_iop_gmic_smooth_bilateral_params_t parameters;
 };
 
+// --- smooth guided
+
+struct dt_iop_gmic_smooth_guided_params_t : public parameter_interface
+{
+  float radius{ 5.f };
+  float smoothness{ 0.05f };
+  int iterations{ 1 };
+  int channel{ 0 };
+  dt_iop_gmic_smooth_guided_params_t() = default;
+  dt_iop_gmic_smooth_guided_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void radius_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void smoothness_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void iterations_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_smooth_guided_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *radius, *smoothness, *iterations, *channel;
+  dt_iop_gmic_smooth_guided_params_t parameters;
+};
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -544,12 +573,14 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_add_grain_gui_data_t add_grain;
   dt_iop_gmic_pop_shadows_gui_data_t pop_shadows;
   dt_iop_gmic_smooth_bilateral_gui_data_t smooth_bilateral;
+  dt_iop_gmic_smooth_guided_gui_data_t smooth_guided;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
                                                         &sharpen_Gold_Meinel.parameters,
                                                         &sharpen_inverse_diffusion.parameters,
                                                         &smooth_bilateral.parameters,
+                                                        &smooth_guided.parameters,
                                                         &freaky_details.parameters,
                                                         &magic_details.parameters,
                                                         &equalize_shadow.parameters,
@@ -685,6 +716,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_add_grain_params_t::get_custom_command();
     res += dt_iop_gmic_pop_shadows_params_t::get_custom_command();
     res += dt_iop_gmic_smooth_bilateral_params_t::get_custom_command();
+    res += dt_iop_gmic_smooth_guided_params_t::get_custom_command();
     return res;
   }();
 
@@ -3452,6 +3484,8 @@ void dt_iop_gmic_smooth_bilateral_params_t::gui_update(dt_iop_module_t *self) co
     g->smooth_bilateral.parameters = *p;
     dt_bauhaus_slider_set(g->smooth_bilateral.spatial_scale, g->smooth_bilateral.parameters.spatial_scale);
     dt_bauhaus_slider_set(g->smooth_bilateral.value_scale, g->smooth_bilateral.parameters.value_scale);
+    dt_bauhaus_slider_set(g->smooth_bilateral.iterations, g->smooth_bilateral.parameters.iterations);
+    dt_bauhaus_combobox_set(g->smooth_bilateral.channel, g->smooth_bilateral.parameters.channel);
   }
 }
 
@@ -3489,6 +3523,149 @@ void dt_iop_gmic_smooth_bilateral_params_t::channel_callback(GtkWidget *w, dt_io
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->smooth_bilateral.parameters.channel = dt_bauhaus_combobox_get(W);
     return G->smooth_bilateral.parameters.to_gmic_params();
+  });
+}
+
+// --- smooth guided
+
+dt_iop_gmic_smooth_guided_params_t::dt_iop_gmic_smooth_guided_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_smooth_guided_params_t()
+{
+  dt_iop_gmic_smooth_guided_params_t p;
+  if(other.filter == smooth_guided
+     and std::sscanf(other.parameters, "dt_smooth_guided %g,%g,%d,%d", &p.radius, &p.smoothness, &p.iterations,
+                     &p.channel)
+             == 4)
+  {
+    p.radius = clamp(0.f, 100.f, p.radius);
+    p.smoothness = clamp(0.f, 1.f, p.smoothness);
+    p.iterations = clamp(1, 10, p.iterations);
+    p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_smooth_guided_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = smooth_guided;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_smooth_guided %g,%g,%d,%d", radius, smoothness,
+                iterations, channel);
+  return ret;
+}
+
+const char *dt_iop_gmic_smooth_guided_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+dt_smooth_guided :
+  apply_channels "repeat $3 guided $1,{512*$2} done",$4
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_smooth_guided_params_t::get_filter() const
+{
+  return smooth_guided;
+}
+
+void dt_iop_gmic_smooth_guided_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == smooth_guided)
+    g->smooth_guided.parameters = *p;
+  else
+    g->smooth_guided.parameters = dt_iop_gmic_smooth_guided_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("smooth guided"));
+  g->smooth_guided.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->smooth_guided.box, TRUE, TRUE, 0);
+
+  g->smooth_guided.radius
+      = dt_bauhaus_slider_new_with_range(self, 0, 100, 0.5, g->smooth_guided.parameters.radius, 2);
+  dt_bauhaus_widget_set_label(g->smooth_guided.radius, NULL, _("radius"));
+  gtk_widget_set_tooltip_text(g->smooth_guided.radius, _("radius of the guided filer"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_guided.box), GTK_WIDGET(g->smooth_guided.radius), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_guided.radius), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_guided_params_t::radius_callback), self);
+
+  g->smooth_guided.smoothness
+      = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->smooth_guided.parameters.smoothness, 3);
+  dt_bauhaus_widget_set_label(g->smooth_guided.smoothness, NULL, _("smoothness"));
+  gtk_widget_set_tooltip_text(g->smooth_guided.smoothness, _("smoothness of guided filter"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_guided.box), GTK_WIDGET(g->smooth_guided.smoothness), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_guided.smoothness), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_guided_params_t::smoothness_callback), self);
+
+  g->smooth_guided.iterations
+      = dt_bauhaus_slider_new_with_range(self, 1, 10, 1, g->smooth_guided.parameters.iterations, 0);
+  dt_bauhaus_widget_set_label(g->smooth_guided.iterations, NULL, _("iterations"));
+  gtk_widget_set_tooltip_text(g->smooth_guided.iterations, _("number of iterations"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_guided.box), GTK_WIDGET(g->smooth_guided.iterations), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_guided.iterations), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_guided_params_t::iterations_callback), self);
+
+  g->smooth_guided.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->smooth_guided.channel, str);
+  dt_bauhaus_widget_set_label(g->smooth_guided.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->smooth_guided.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_guided.box), g->smooth_guided.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_guided.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_guided_params_t::channel_callback), self);
+
+  gtk_widget_show_all(g->smooth_guided.box);
+  gtk_widget_set_no_show_all(g->smooth_guided.box, TRUE);
+  gtk_widget_set_visible(g->smooth_guided.box, p->filter == smooth_guided ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_smooth_guided_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->smooth_guided.box, p->filter == smooth_guided ? TRUE : FALSE);
+  if(p->filter == smooth_guided)
+  {
+    g->smooth_guided.parameters = *p;
+    dt_bauhaus_slider_set(g->smooth_guided.radius, g->smooth_guided.parameters.radius);
+    dt_bauhaus_slider_set(g->smooth_guided.smoothness, g->smooth_guided.parameters.smoothness);
+    dt_bauhaus_slider_set(g->smooth_guided.iterations, g->smooth_guided.parameters.iterations);
+    dt_bauhaus_combobox_set(g->smooth_guided.channel, g->smooth_guided.parameters.channel);
+  }
+}
+
+void dt_iop_gmic_smooth_guided_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_smooth_guided_params_t();
+}
+
+void dt_iop_gmic_smooth_guided_params_t::radius_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_guided.parameters.radius = dt_bauhaus_slider_get(W);
+    return G->smooth_guided.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_guided_params_t::smoothness_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_guided.parameters.smoothness = dt_bauhaus_slider_get(W);
+    return G->smooth_guided.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_guided_params_t::iterations_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_guided.parameters.iterations = static_cast<int>(std::round(dt_bauhaus_slider_get(W)));
+    return G->smooth_guided.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_guided_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_guided.parameters.channel = dt_bauhaus_combobox_get(W);
+    return G->smooth_guided.parameters.to_gmic_params();
   });
 }
 
