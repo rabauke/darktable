@@ -59,7 +59,9 @@ enum filter_type
   basic_color_adjustments,
   equalize_shadow,
   add_grain,
-  pop_shadows
+  pop_shadows,
+  smooth_bilateral,
+  smooth_guided
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -485,6 +487,35 @@ struct dt_iop_gmic_pop_shadows_gui_data_t
   dt_iop_gmic_pop_shadows_params_t parameters;
 };
 
+// --- smooth bilateral
+
+struct dt_iop_gmic_smooth_bilateral_params_t : public parameter_interface
+{
+  float spatial_scale{ 5.f };
+  float value_scale{ 0.02f };
+  int iterations{ 2 };
+  int channel{ 0 };
+  dt_iop_gmic_smooth_bilateral_params_t() = default;
+  dt_iop_gmic_smooth_bilateral_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void spatial_scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void value_scale_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void iterations_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_smooth_bilateral_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *spatial_scale, *value_scale, *iterations, *channel;
+  dt_iop_gmic_smooth_bilateral_params_t parameters;
+};
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -512,11 +543,13 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_equalize_shadow_gui_data_t equalize_shadow;
   dt_iop_gmic_add_grain_gui_data_t add_grain;
   dt_iop_gmic_pop_shadows_gui_data_t pop_shadows;
+  dt_iop_gmic_smooth_bilateral_gui_data_t smooth_bilateral;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
                                                         &sharpen_Gold_Meinel.parameters,
                                                         &sharpen_inverse_diffusion.parameters,
+                                                        &smooth_bilateral.parameters,
                                                         &freaky_details.parameters,
                                                         &magic_details.parameters,
                                                         &equalize_shadow.parameters,
@@ -598,15 +631,12 @@ extern "C" void gui_init(dt_iop_module_t *self)
   self->gui_data = new dt_iop_gmic_gui_data_t;
   dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-
   g->gmic_filter = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->gmic_filter, NULL, _("G'MIC filter"));
   gtk_widget_set_tooltip_text(g->gmic_filter, _("choose an image processing filter"));
   gtk_box_pack_start(GTK_BOX(self->widget), g->gmic_filter, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->gmic_filter), "value-changed", G_CALLBACK(filter_callback), self);
-
   for(const auto f : g->filter_list) f->gui_init(self);
-
   dt_pthread_mutex_init(&g->lock, NULL);
 }
 
@@ -654,6 +684,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_equalize_shadow_params_t::get_custom_command();
     res += dt_iop_gmic_add_grain_params_t::get_custom_command();
     res += dt_iop_gmic_pop_shadows_params_t::get_custom_command();
+    res += dt_iop_gmic_smooth_bilateral_params_t::get_custom_command();
     return res;
   }();
 
@@ -3314,6 +3345,150 @@ void dt_iop_gmic_pop_shadows_params_t::scale_callback(GtkWidget *w, dt_iop_modul
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->pop_shadows.parameters.scale = dt_bauhaus_slider_get(W);
     return G->pop_shadows.parameters.to_gmic_params();
+  });
+}
+
+// --- smooth bilateral
+
+dt_iop_gmic_smooth_bilateral_params_t::dt_iop_gmic_smooth_bilateral_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_smooth_bilateral_params_t()
+{
+  dt_iop_gmic_smooth_bilateral_params_t p;
+  if(other.filter == smooth_bilateral
+     and std::sscanf(other.parameters, "dt_smooth_bilateral %g,%g,%d,%d", &p.spatial_scale, &p.value_scale,
+                     &p.iterations, &p.channel)
+             == 4)
+  {
+    p.spatial_scale = clamp(0.f, 100.f, p.spatial_scale);
+    p.value_scale = clamp(0.f, 1.f, p.value_scale);
+    p.iterations = clamp(1, 10, p.iterations);
+    p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_smooth_bilateral_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = smooth_bilateral;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_smooth_bilateral %g,%g,%d,%d", spatial_scale,
+                value_scale, iterations, channel);
+  return ret;
+}
+
+const char *dt_iop_gmic_smooth_bilateral_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+dt_smooth_bilateral :
+  apply_channels "repeat $3 bilateral $1,{255*$2} done",$4
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_smooth_bilateral_params_t::get_filter() const
+{
+  return smooth_bilateral;
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == smooth_bilateral)
+    g->smooth_bilateral.parameters = *p;
+  else
+    g->smooth_bilateral.parameters = dt_iop_gmic_smooth_bilateral_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("smooth bilateral"));
+  g->smooth_bilateral.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->smooth_bilateral.box, TRUE, TRUE, 0);
+
+  g->smooth_bilateral.spatial_scale
+      = dt_bauhaus_slider_new_with_range(self, 0, 100, 0.5, g->smooth_bilateral.parameters.spatial_scale, 2);
+  dt_bauhaus_widget_set_label(g->smooth_bilateral.spatial_scale, NULL, _("spatial scale"));
+  gtk_widget_set_tooltip_text(g->smooth_bilateral.spatial_scale,
+                              _("spatial standard deviation of Gaussian kernel"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_bilateral.box), GTK_WIDGET(g->smooth_bilateral.spatial_scale), TRUE, TRUE,
+                     0);
+  g_signal_connect(G_OBJECT(g->smooth_bilateral.spatial_scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_bilateral_params_t::spatial_scale_callback), self);
+
+  g->smooth_bilateral.value_scale
+      = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->smooth_bilateral.parameters.spatial_scale, 3);
+  dt_bauhaus_widget_set_label(g->smooth_bilateral.value_scale, NULL, _("value scale"));
+  gtk_widget_set_tooltip_text(g->smooth_bilateral.value_scale,
+                              _("color/luminance standard deviation of Gaussian kernel"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_bilateral.box), GTK_WIDGET(g->smooth_bilateral.value_scale), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_bilateral.value_scale), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_bilateral_params_t::value_scale_callback), self);
+
+  g->smooth_bilateral.iterations
+      = dt_bauhaus_slider_new_with_range(self, 1, 10, 1, g->smooth_bilateral.parameters.iterations, 0);
+  dt_bauhaus_widget_set_label(g->smooth_bilateral.iterations, NULL, _("iterations"));
+  gtk_widget_set_tooltip_text(g->smooth_bilateral.iterations, _("number of iterations"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_bilateral.box), GTK_WIDGET(g->smooth_bilateral.iterations), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_bilateral.iterations), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_bilateral_params_t::iterations_callback), self);
+
+  g->smooth_bilateral.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->smooth_bilateral.channel, str);
+  dt_bauhaus_widget_set_label(g->smooth_bilateral.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->smooth_bilateral.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->smooth_bilateral.box), g->smooth_bilateral.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->smooth_bilateral.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_smooth_bilateral_params_t::channel_callback), self);
+
+  gtk_widget_show_all(g->smooth_bilateral.box);
+  gtk_widget_set_no_show_all(g->smooth_bilateral.box, TRUE);
+  gtk_widget_set_visible(g->smooth_bilateral.box, p->filter == smooth_bilateral ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->smooth_bilateral.box, p->filter == smooth_bilateral ? TRUE : FALSE);
+  if(p->filter == smooth_bilateral)
+  {
+    g->smooth_bilateral.parameters = *p;
+    dt_bauhaus_slider_set(g->smooth_bilateral.spatial_scale, g->smooth_bilateral.parameters.spatial_scale);
+    dt_bauhaus_slider_set(g->smooth_bilateral.value_scale, g->smooth_bilateral.parameters.value_scale);
+  }
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_smooth_bilateral_params_t();
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::spatial_scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_bilateral.parameters.spatial_scale = dt_bauhaus_slider_get(W);
+    return G->smooth_bilateral.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::value_scale_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_bilateral.parameters.value_scale = dt_bauhaus_slider_get(W);
+    return G->smooth_bilateral.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::iterations_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_bilateral.parameters.iterations = static_cast<int>(std::round(dt_bauhaus_slider_get(W)));
+    return G->smooth_bilateral.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_smooth_bilateral_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->smooth_bilateral.parameters.channel = dt_bauhaus_combobox_get(W);
+    return G->smooth_bilateral.parameters.to_gmic_params();
   });
 }
 
