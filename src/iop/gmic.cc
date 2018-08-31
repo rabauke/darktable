@@ -61,7 +61,8 @@ enum filter_type
   add_grain,
   pop_shadows,
   smooth_bilateral,
-  smooth_guided
+  smooth_guided,
+  light_glow
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -545,6 +546,37 @@ struct dt_iop_gmic_smooth_guided_gui_data_t
   dt_iop_gmic_smooth_guided_params_t parameters;
 };
 
+// --- light glow
+
+struct dt_iop_gmic_light_glow_params_t : public parameter_interface
+{
+  float density{ 0.3f };
+  float amplitude{ 0.5f };
+  int blend_mode{ 8 };
+  float opacity{ 0.8f };
+  int channel{ 0 };
+  dt_iop_gmic_light_glow_params_t() = default;
+  dt_iop_gmic_light_glow_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void density_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void amplitude_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void blend_mode_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void opacity_callback(GtkWidget *w, dt_iop_module_t *self);
+  static void channel_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_light_glow_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *density, *amplitude, *blend_mode, *opacity, *channel;
+  dt_iop_gmic_light_glow_params_t parameters;
+};
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -574,6 +606,7 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_pop_shadows_gui_data_t pop_shadows;
   dt_iop_gmic_smooth_bilateral_gui_data_t smooth_bilateral;
   dt_iop_gmic_smooth_guided_gui_data_t smooth_guided;
+  dt_iop_gmic_light_glow_gui_data_t light_glow;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
@@ -585,6 +618,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &magic_details.parameters,
                                                         &equalize_shadow.parameters,
                                                         &pop_shadows.parameters,
+                                                        &light_glow.parameters,
                                                         &sepia.parameters,
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
@@ -717,6 +751,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_pop_shadows_params_t::get_custom_command();
     res += dt_iop_gmic_smooth_bilateral_params_t::get_custom_command();
     res += dt_iop_gmic_smooth_guided_params_t::get_custom_command();
+    res += dt_iop_gmic_light_glow_params_t::get_custom_command();
     return res;
   }();
 
@@ -3666,6 +3701,173 @@ void dt_iop_gmic_smooth_guided_params_t::channel_callback(GtkWidget *w, dt_iop_m
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->smooth_guided.parameters.channel = dt_bauhaus_combobox_get(W);
     return G->smooth_guided.parameters.to_gmic_params();
+  });
+}
+
+// --- light glow
+
+dt_iop_gmic_light_glow_params_t::dt_iop_gmic_light_glow_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_light_glow_params_t()
+{
+  dt_iop_gmic_light_glow_params_t p;
+  if(other.filter == smooth_guided
+     and std::sscanf(other.parameters, "dt_light_glow %g,%g,%d,%g,%d", &p.density, &p.amplitude, &p.blend_mode,
+                     &p.opacity, &p.channel)
+             == 5)
+  {
+    p.density = clamp(0.f, 1.f, p.density);
+    p.amplitude = clamp(0.f, 2.f, p.amplitude);
+    p.blend_mode = clamp(0, 12, p.blend_mode);
+    p.opacity = clamp(0.f, 1.f, p.opacity);
+    p.channel = clamp(0, static_cast<int>(color_channels.size() - 1), p.channel);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_light_glow_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = light_glow;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_light_glow %g,%g,%d,%g,%d", density, amplitude,
+                blend_mode, opacity, channel);
+  return ret;
+}
+
+const char *dt_iop_gmic_light_glow_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+_dt_light_glow :
+  mode=${arg\ 1+$3,burn,dodge,freeze,grainmerge,hardlight,interpolation,lighten,multiply,overlay,reflect,softlight,stamp,value}
+  repeat $!
+    +gradient_norm. >=. {100-$1}% distance. 1 ^. $2 *. -1 n. 0,255 blend $mode,$4
+  mv. 0 done
+
+dt_light_glow :
+  apply_channels "_dt_light_glow {100*$1},$2,$3,$4",$5
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_light_glow_params_t::get_filter() const
+{
+  return light_glow;
+}
+
+void dt_iop_gmic_light_glow_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == light_glow)
+    g->light_glow.parameters = *p;
+  else
+    g->light_glow.parameters = dt_iop_gmic_light_glow_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("light glow"));
+  g->light_glow.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->light_glow.box, TRUE, TRUE, 0);
+
+  g->light_glow.density = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->light_glow.parameters.density, 3);
+  dt_bauhaus_widget_set_label(g->light_glow.density, NULL, _("density"));
+  gtk_widget_set_tooltip_text(g->light_glow.density, _("density of the light glow filter"));
+  gtk_box_pack_start(GTK_BOX(g->light_glow.box), GTK_WIDGET(g->light_glow.density), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->light_glow.density), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_light_glow_params_t::density_callback), self);
+
+  g->light_glow.amplitude
+      = dt_bauhaus_slider_new_with_range(self, 0, 2, 0.02, g->light_glow.parameters.amplitude, 3);
+  dt_bauhaus_widget_set_label(g->light_glow.amplitude, NULL, _("amplitude"));
+  gtk_widget_set_tooltip_text(g->light_glow.amplitude, _("amplitude of the light glow filter"));
+  gtk_box_pack_start(GTK_BOX(g->light_glow.box), GTK_WIDGET(g->light_glow.amplitude), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->light_glow.amplitude), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_light_glow_params_t::amplitude_callback), self);
+
+  g->light_glow.blend_mode = dt_bauhaus_combobox_new(self);
+  for(auto i : { _("burn"), _("dodge"), _("freeze"), _("grain merge"), _("hard light"), _("interpolation"),
+                 _("lighten"), _("multiply"), _("overlay"), _("reflect"), _("soft light"), _("stamp"), _("Value") })
+    dt_bauhaus_combobox_add(g->light_glow.blend_mode, i);
+  dt_bauhaus_widget_set_label(g->light_glow.blend_mode, NULL, _("blend mode"));
+  gtk_widget_set_tooltip_text(g->light_glow.blend_mode, _("blend mode of light glow filter"));
+  gtk_box_pack_start(GTK_BOX(g->light_glow.box), g->light_glow.blend_mode, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->light_glow.blend_mode), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_light_glow_params_t::blend_mode_callback), self);
+
+  g->light_glow.opacity = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->light_glow.parameters.opacity, 3);
+  dt_bauhaus_widget_set_label(g->light_glow.opacity, NULL, _("opacity"));
+  gtk_widget_set_tooltip_text(g->light_glow.opacity, _("opacity of the light glow filter"));
+  gtk_box_pack_start(GTK_BOX(g->light_glow.box), GTK_WIDGET(g->light_glow.opacity), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->light_glow.opacity), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_light_glow_params_t::opacity_callback), self);
+
+  g->light_glow.channel = dt_bauhaus_combobox_new(self);
+  for(auto str : color_channels) dt_bauhaus_combobox_add(g->light_glow.channel, str);
+  dt_bauhaus_widget_set_label(g->light_glow.channel, NULL, _("channel"));
+  gtk_widget_set_tooltip_text(g->light_glow.channel, _("apply filter to specific color channel(s)"));
+  gtk_box_pack_start(GTK_BOX(g->light_glow.box), g->light_glow.channel, TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->light_glow.channel), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_light_glow_params_t::channel_callback), self);
+
+  gtk_widget_show_all(g->light_glow.box);
+  gtk_widget_set_no_show_all(g->light_glow.box, TRUE);
+  gtk_widget_set_visible(g->light_glow.box, p->filter == light_glow ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_light_glow_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->light_glow.box, p->filter == light_glow ? TRUE : FALSE);
+  if(p->filter == light_glow)
+  {
+    g->light_glow.parameters = *p;
+    dt_bauhaus_slider_set(g->light_glow.density, g->light_glow.parameters.density);
+    dt_bauhaus_slider_set(g->light_glow.amplitude, g->light_glow.parameters.amplitude);
+    dt_bauhaus_combobox_set(g->light_glow.blend_mode, g->light_glow.parameters.blend_mode);
+    dt_bauhaus_slider_set(g->light_glow.opacity, g->light_glow.parameters.opacity);
+    dt_bauhaus_combobox_set(g->light_glow.channel, g->light_glow.parameters.channel);
+  }
+}
+
+void dt_iop_gmic_light_glow_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_light_glow_params_t();
+}
+
+void dt_iop_gmic_light_glow_params_t::density_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->light_glow.parameters.density = dt_bauhaus_slider_get(W);
+    return G->light_glow.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_light_glow_params_t::amplitude_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->light_glow.parameters.amplitude = dt_bauhaus_slider_get(W);
+    return G->light_glow.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_light_glow_params_t::blend_mode_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->light_glow.parameters.blend_mode = dt_bauhaus_combobox_get(W);
+    return G->light_glow.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_light_glow_params_t::opacity_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->light_glow.parameters.opacity = dt_bauhaus_slider_get(W);
+    return G->light_glow.parameters.to_gmic_params();
+  });
+}
+
+void dt_iop_gmic_light_glow_params_t::channel_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->freaky_details.parameters.channel = dt_bauhaus_combobox_get(W);
+    return G->freaky_details.parameters.to_gmic_params();
   });
 }
 
