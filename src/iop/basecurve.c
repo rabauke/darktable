@@ -1932,6 +1932,9 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(c->exposure_step, NULL, _("exposure shift"));
   gtk_box_pack_start(GTK_BOX(self->widget), c->exposure_step, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(c->exposure_step), "value-changed", G_CALLBACK(exposure_step_callback), self);
+  gtk_widget_show_all(c->exposure_step);
+  gtk_widget_set_no_show_all(c->exposure_step, TRUE);
+  gtk_widget_set_visible(c->exposure_step, p->exposure_fusion != 0 ? TRUE : FALSE);
 
   // initially set to 1 (consistency with previous versions), but double-click resets to 0
   // to get a quick way to reach 0 with the mouse.
@@ -1941,6 +1944,9 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(c->exposure_bias, NULL, _("exposure bias"));
   gtk_box_pack_start(GTK_BOX(self->widget), c->exposure_bias, TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(c->exposure_bias), "value-changed", G_CALLBACK(exposure_bias_callback), self);
+  gtk_widget_show_all(c->exposure_bias);
+  gtk_widget_set_no_show_all(c->exposure_bias, TRUE);
+  gtk_widget_set_visible(c->exposure_bias, p->exposure_fusion != 0 ? TRUE : FALSE);
 
   gtk_widget_add_events(GTK_WIDGET(c->area), GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK
                                                  | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
