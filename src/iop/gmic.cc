@@ -62,7 +62,8 @@ enum filter_type
   pop_shadows,
   smooth_bilateral,
   smooth_guided,
-  light_glow
+  light_glow,
+  lomo
 };
 
 typedef struct dt_iop_gmic_params_t
@@ -577,6 +578,29 @@ struct dt_iop_gmic_light_glow_gui_data_t
   dt_iop_gmic_light_glow_params_t parameters;
 };
 
+// --- lomo
+
+struct dt_iop_gmic_lomo_params_t : public parameter_interface
+{
+  float vignette_size{ 0.2f };
+  dt_iop_gmic_lomo_params_t() = default;
+  dt_iop_gmic_lomo_params_t(const dt_iop_gmic_params_t &other);
+  dt_iop_gmic_params_t to_gmic_params() const override;
+  static const char *get_custom_command();
+  filter_type get_filter() const override;
+  void gui_init(dt_iop_module_t *self) const override;
+  void gui_update(dt_iop_module_t *self) const override;
+  void gui_reset(dt_iop_module_t *self) override;
+  static void vignette_size_callback(GtkWidget *w, dt_iop_module_t *self);
+};
+
+struct dt_iop_gmic_lomo_gui_data_t
+{
+  GtkWidget *box;
+  GtkWidget *vignette_size;
+  dt_iop_gmic_lomo_params_t parameters;
+};
+
 //----------------------------------------------------------------------
 // implement the module api
 //----------------------------------------------------------------------
@@ -607,6 +631,7 @@ struct dt_iop_gmic_gui_data_t
   dt_iop_gmic_smooth_bilateral_gui_data_t smooth_bilateral;
   dt_iop_gmic_smooth_guided_gui_data_t smooth_guided;
   dt_iop_gmic_light_glow_gui_data_t light_glow;
+  dt_iop_gmic_lomo_gui_data_t lomo;
   const std::vector<parameter_interface *> filter_list{ &none.parameters,
                                                         &basic_color_adjustments.parameters,
                                                         &sharpen_Richardson_Lucy.parameters,
@@ -623,6 +648,7 @@ struct dt_iop_gmic_gui_data_t
                                                         &film_emulation.parameters,
                                                         &custom_film_emulation.parameters,
                                                         &add_grain.parameters,
+                                                        &lomo.parameters,
                                                         &expert_mode.parameters };
   dt_pthread_mutex_t lock;
   dt_iop_gmic_gui_data_t() = default;
@@ -752,6 +778,7 @@ extern "C" void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
     res += dt_iop_gmic_smooth_bilateral_params_t::get_custom_command();
     res += dt_iop_gmic_smooth_guided_params_t::get_custom_command();
     res += dt_iop_gmic_light_glow_params_t::get_custom_command();
+    res += dt_iop_gmic_lomo_params_t::get_custom_command();
     return res;
   }();
 
@@ -3710,7 +3737,7 @@ dt_iop_gmic_light_glow_params_t::dt_iop_gmic_light_glow_params_t(const dt_iop_gm
   : dt_iop_gmic_light_glow_params_t()
 {
   dt_iop_gmic_light_glow_params_t p;
-  if(other.filter == smooth_guided
+  if(other.filter == light_glow
      and std::sscanf(other.parameters, "dt_light_glow %g,%g,%d,%g,%d", &p.density, &p.amplitude, &p.blend_mode,
                      &p.opacity, &p.channel)
              == 5)
@@ -3868,6 +3895,99 @@ void dt_iop_gmic_light_glow_params_t::channel_callback(GtkWidget *w, dt_iop_modu
   callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
     G->freaky_details.parameters.channel = dt_bauhaus_combobox_get(W);
     return G->freaky_details.parameters.to_gmic_params();
+  });
+}
+
+// --- lomo
+
+dt_iop_gmic_lomo_params_t::dt_iop_gmic_lomo_params_t(const dt_iop_gmic_params_t &other)
+  : dt_iop_gmic_lomo_params_t()
+{
+  dt_iop_gmic_lomo_params_t p;
+  if(other.filter == lomo and std::sscanf(other.parameters, "dt_lomo %g", &p.vignette_size) == 1)
+  {
+    p.vignette_size = clamp(0.f, 1.f, p.vignette_size);
+    *this = p;
+  }
+}
+
+dt_iop_gmic_params_t dt_iop_gmic_lomo_params_t::to_gmic_params() const
+{
+  dt_iop_gmic_params_t ret;
+  ret.filter = lomo;
+  std::snprintf(ret.parameters, sizeof(ret.parameters), "dt_lomo %g", vignette_size);
+  return ret;
+}
+
+const char *dt_iop_gmic_lomo_params_t::get_custom_command() {
+  // clang-format off
+  return R"raw(
+dt_lomo :
+  remove_opacity repeat $! l[$>] to_rgb
+    +gaussian {125-125*$1+25}%,{125-125*$1+25}% n. 0,1 *
+    s c
+    f[0] '255*atan((i-128)/128)'
+    f[1] '255*tan((i-128)/128)'
+    f[2] '255*atan((i-128)/255)'
+    a c
+    sharpen 1
+    normalize 0,255
+  endl done
+)raw";
+  // clang-format on
+}
+
+filter_type dt_iop_gmic_lomo_params_t::get_filter() const
+{
+  return lomo;
+}
+
+void dt_iop_gmic_lomo_params_t::gui_init(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  if(p->filter == lomo)
+    g->lomo.parameters = *p;
+  else
+    g->lomo.parameters = dt_iop_gmic_lomo_params_t();
+  dt_bauhaus_combobox_add(g->gmic_filter, _("lomo"));
+  g->lomo.box = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->lomo.box, TRUE, TRUE, 0);
+
+  g->lomo.vignette_size = dt_bauhaus_slider_new_with_range(self, 0, 1, 0.01, g->lomo.parameters.vignette_size, 3);
+  dt_bauhaus_widget_set_label(g->lomo.vignette_size, NULL, _("vignette"));
+  gtk_widget_set_tooltip_text(g->lomo.vignette_size, _("size of vignette"));
+  gtk_box_pack_start(GTK_BOX(g->lomo.box), GTK_WIDGET(g->lomo.vignette_size), TRUE, TRUE, 0);
+  g_signal_connect(G_OBJECT(g->lomo.vignette_size), "value-changed",
+                   G_CALLBACK(dt_iop_gmic_lomo_params_t::vignette_size_callback), self);
+
+  gtk_widget_show_all(g->lomo.box);
+  gtk_widget_set_no_show_all(g->lomo.box, TRUE);
+  gtk_widget_set_visible(g->lomo.box, p->filter == lomo ? TRUE : FALSE);
+}
+
+void dt_iop_gmic_lomo_params_t::gui_update(dt_iop_module_t *self) const
+{
+  dt_iop_gmic_gui_data_t *g = reinterpret_cast<dt_iop_gmic_gui_data_t *>(self->gui_data);
+  dt_iop_gmic_params_t *p = reinterpret_cast<dt_iop_gmic_params_t *>(self->params);
+  gtk_widget_set_visible(g->lomo.box, p->filter == lomo ? TRUE : FALSE);
+  if(p->filter == lomo)
+  {
+    g->lomo.parameters = *p;
+    dt_bauhaus_slider_set(g->lomo.vignette_size, g->lomo.parameters.vignette_size);
+  }
+}
+
+void dt_iop_gmic_lomo_params_t::gui_reset(dt_iop_module_t *self)
+{
+  *this = dt_iop_gmic_lomo_params_t();
+}
+
+void dt_iop_gmic_lomo_params_t::vignette_size_callback(GtkWidget *w, dt_iop_module_t *self)
+{
+  callback(w, self, [](dt_iop_gmic_gui_data_t *G, GtkWidget *W) {
+    G->lomo.parameters.vignette_size = dt_bauhaus_slider_get(W);
+    return G->lomo.parameters.to_gmic_params();
   });
 }
 
