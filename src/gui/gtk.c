@@ -56,7 +56,6 @@
 #endif
 #include <pthread.h>
 
-
 /*
  * NEW UI API
  */
@@ -163,7 +162,9 @@ static void key_accel_changed(GtkAccelMap *object, gchar *accel_path, guint acce
   // darkroom
   dt_accel_path_view(path, sizeof(path), "darkroom", "full preview");
   gtk_accel_map_lookup_entry(path, &darktable.control->accels.darkroom_preview);
-
+  // add an option to allow skip mouse events while editing masks
+  dt_accel_path_view(path, sizeof(path), "darkroom", "allow to pan & zoom while editing masks");
+  gtk_accel_map_lookup_entry(path, &darktable.control->accels.darkroom_skip_mouse_events);
 
   // Global
   dt_accel_path_global(path, sizeof(path), "toggle side borders");
@@ -838,7 +839,7 @@ static gboolean button_pressed(GtkWidget *w, GdkEventButton *event, gpointer use
   dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state & 0xf);
   gtk_widget_grab_focus(w);
   gtk_widget_queue_draw(w);
-  return TRUE;
+  return FALSE;
 }
 
 static gboolean button_released(GtkWidget *w, GdkEventButton *event, gpointer user_data)
@@ -1016,6 +1017,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(widget), "button-press-event", G_CALLBACK(button_pressed), NULL);
   g_signal_connect(G_OBJECT(widget), "button-release-event", G_CALLBACK(button_released), NULL);
   g_signal_connect(G_OBJECT(widget), "scroll-event", G_CALLBACK(scrolled), NULL);
+
   // TODO: left, right, top, bottom:
   // leave-notify-event
 

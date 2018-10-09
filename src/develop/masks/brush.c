@@ -890,11 +890,39 @@ static void dt_brush_get_distance(float x, int y, float as, dt_masks_form_gui_t 
   if(!gpt) return;
 
   // we first check if we are inside the source form
-  if(dt_masks_point_in_form_exact(x,yf,gpt->source,corner_count * 6,gpt->source_count))
+
+  // add support for clone masks
+  if(gpt->points_count > 2 + corner_count * 3 && gpt->source_count > 2 + corner_count * 3)
   {
-    *inside_source = 1;
-    *inside = 1;
-    return;
+    float dx = -gpt->points[2] + gpt->source[2];
+    float dy = -gpt->points[3] + gpt->source[3];
+
+    int current_seg = 1;
+    for(int i = corner_count * 3; i < gpt->points_count; i++)
+    {
+      // do we change of path segment ?
+      if(gpt->points[i * 2 + 1] == gpt->points[current_seg * 6 + 3]
+         && gpt->points[i * 2] == gpt->points[current_seg * 6 + 2])
+      {
+        current_seg = (current_seg + 1) % corner_count;
+      }
+      // distance from tested point to current form point
+      const float yy = gpt->points[i * 2 + 1] + dy;
+      const float xx = gpt->points[i * 2] + dx;
+      if((yy - yf) < as && (yy - yf) > -as && (xx - x) < as && (xx - x) > -as)
+      {
+        if(current_seg == 0)
+          *inside_source = corner_count - 1;
+        else
+          *inside_source = current_seg - 1;
+
+        if(*inside_source)
+        {
+          *inside = 1;
+          return;
+        }
+      }
+    }
   }
 
   // we check if it's inside borders
@@ -985,6 +1013,77 @@ static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *f
   return tmin;
 }
 
+// set the initial source position value for a clone mask
+static void dt_brush_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form, float *points,
+                                                  const float pzx, const float pzy)
+{
+  const float iwd = darktable.develop->preview_pipe->iwidth;
+  const float iht = darktable.develop->preview_pipe->iheight;
+  float pts[2] = { 0.f };
+
+  // if this is the first time the relative pos is used
+  if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
+  {
+    // if is has not been defined by the user, set some default
+    if(gui->posx_source == -1.f && gui->posy_source == -1.f)
+    {
+      pts[0] = points[0];
+      pts[1] = points[1];
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      pts[0] /= iwd;
+      pts[1] /= iht;
+
+      form->source[0] = pts[0] + 0.01f;
+      form->source[1] = pts[1] + 0.01f;
+    }
+    else
+    {
+      // if a position was defined by the user, use the absolute value the first time
+      pts[0] = gui->posx_source;
+      pts[1] = gui->posy_source;
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+
+      form->source[0] = pts[0] / iwd;
+      form->source[1] = pts[1] / iht;
+    }
+
+    // save the relative value for the next time
+    pts[0] = points[0];
+    pts[1] = points[1];
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    pts[0] /= iwd;
+    pts[1] /= iht;
+
+    gui->posx_source = form->source[0] - pts[0];
+    gui->posy_source = form->source[1] - pts[1];
+
+    gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE;
+  }
+  else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
+  {
+    // original pos was already defined and relative value calculated, just use it
+    pts[0] = points[0];
+    pts[1] = points[1];
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    pts[0] /= iwd;
+    pts[1] /= iht;
+
+    form->source[0] = pts[0] + gui->posx_source;
+    form->source[1] = pts[1] + gui->posy_source;
+  }
+  else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
+  {
+    // an absolute position was defined by the user
+    pts[0] = gui->posx_source;
+    pts[1] = gui->posy_source;
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+
+    form->source[0] = pts[0] / iwd;
+    form->source[1] = pts[1] / iht;
+  }
+  else
+    fprintf(stderr, "unknown source position type\n");
+}
 
 static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                           uint32_t state, dt_masks_form_t *form, int parentid,
@@ -998,7 +1097,7 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
       float amount = 1.25f;
       if(up) amount = 0.8f;
 
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         masks_hardness = dt_conf_get_float("plugins/darkroom/spots/brush_hardness");
         masks_hardness = MAX(0.05f, MIN(masks_hardness * amount, 1.0f));
@@ -1022,7 +1121,7 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
       float amount = 1.25f;
       if(up) amount = 0.8f;
 
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         masks_density = dt_conf_get_float("plugins/darkroom/spots/brush_density");
         masks_density = MAX(0.05f, MIN(masks_density * amount, 1.0f));
@@ -1047,7 +1146,7 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
       float amount = 1.03f;
       if(up) amount = 0.97f;
 
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         masks_border = dt_conf_get_float("plugins/darkroom/spots/brush_border");
         masks_border = MAX(0.005f, MIN(masks_border * amount, 0.5f));
@@ -1101,7 +1200,7 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
           point->border[0] *= amount;
           point->border[1] *= amount;
         }
-        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         {
           float masks_border = dt_conf_get_float("plugins/darkroom/spots/brush_border");
           masks_border = MAX(0.005f, MIN(masks_border * amount, 0.5f));
@@ -1124,7 +1223,7 @@ static int dt_brush_events_mouse_scrolled(struct dt_iop_module_t *module, float 
           float masks_hardness = point->hardness;
           point->hardness = MAX(0.05f, MIN(masks_hardness * amount, 1.0f));
         }
-        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         {
           float masks_hardness = dt_conf_get_float("plugins/darkroom/spots/brush_hardness");
           masks_hardness = MAX(0.05f, MIN(masks_hardness * amount, 1.0f));
@@ -1163,24 +1262,31 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
   if(!gpt) return 0;
 
   float masks_border;
-  if(form->type & DT_MASKS_CLONE)
+  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_border"), 0.5f);
   else
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/border"), 0.5f);
 
   float masks_hardness;
-  if(form->type & DT_MASKS_CLONE)
+  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     masks_hardness = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_hardness"), 1.0f);
   else
     masks_hardness = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/hardness"), 1.0f);
 
   float masks_density;
-  if(form->type & DT_MASKS_CLONE)
+  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     masks_density = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_density"), 1.0f);
   else
     masks_density = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/density"), 1.0f);
 
-  if(which == 1)
+  if(gui->creation && which == 1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)))
+  {
+    // set some absolute or relative position for the source of the clone mask
+    if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
+
+    return 1;
+  }
+  else if(which == 1)
   {
     if(gui->creation)
     {
@@ -1199,6 +1305,17 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
       dt_masks_dynbuf_add(gui->guipoints_payload, pressure);
 
       gui->guipoints_count = 1;
+
+      // add support for clone masks
+      if(form->type & DT_MASKS_CLONE)
+      {
+        dt_brush_set_source_pos_initial_value(gui, form, dt_masks_dynbuf_buffer(gui->guipoints), pzx, pzy);
+      }
+      else
+      {
+        // not used by regular masks
+        form->source[0] = form->source[1] = 0.0f;
+      }
 
       gui->pressure_sensitivity = DT_MASKS_PRESSURE_OFF;
       char *psens = dt_conf_get_string("pressure_sensitivity");
@@ -1226,8 +1343,6 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
       if(!gpt) return 0;
       // we start the form dragging
       gui->source_dragging = TRUE;
-      gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
       gui->dx = gpt->source[2] - gui->posx;
       gui->dy = gpt->source[3] - gui->posy;
       return 1;
@@ -1236,8 +1351,6 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
     {
       gui->form_dragging = TRUE;
       gui->point_edited = -1;
-      gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
       gui->dx = gpt->points[2] - gui->posx;
       gui->dy = gpt->points[3] - gui->posy;
       return 1;
@@ -1337,8 +1450,6 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
       {
         // we move the entire segment
         gui->seg_dragging = gui->seg_selected;
-        gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-        gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
         gui->dx = gpt->points[gui->seg_selected * 6 + 2] - gui->posx;
         gui->dy = gpt->points[gui->seg_selected * 6 + 3] - gui->posy;
       }
@@ -1353,6 +1464,10 @@ static int dt_brush_events_button_pressed(struct dt_iop_module_t *module, float 
     gui->guipoints = NULL;
     gui->guipoints_payload = NULL;
     gui->guipoints_count = 0;
+
+    gui->creation_continuous = FALSE;
+    gui->creation_continuous_module = NULL;
+
     dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
     dt_masks_iop_update(module);
     dt_control_queue_redraw_center();
@@ -1478,18 +1593,22 @@ static int dt_brush_events_button_released(struct dt_iop_module_t *module, float
   if(!gpt) return 0;
 
   float masks_border;
-  if(form->type & DT_MASKS_CLONE)
+  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_border"), 0.5f);
   else
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/border"), 0.5f);
 
-  if(gui->creation && which == 1)
+  if(gui->creation && which == 1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)))
+  {
+    // user just set the source position, so just return
+    return 1;
+  }
+  else if(gui->creation && which == 1)
   {
     dt_iop_module_t *crea_module = gui->creation_module;
 
     if(gui->guipoints && gui->guipoints_count > 0)
     {
-
       // if the path consists only of one x/y pair we add a second one close so we don't need to deal with
       // this special case later
       if(gui->guipoints_count == 1)
@@ -1584,17 +1703,54 @@ static int dt_brush_events_button_released(struct dt_iop_module_t *module, float
 
       // we save the form and quit creation mode
       dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
+
       if(crea_module)
       {
         dt_dev_add_history_item(darktable.develop, crea_module, TRUE);
         // and we switch in edit mode to show all the forms
-        dt_masks_set_edit_mode(crea_module, TRUE);
+        if(gui->creation_continuous)
+          dt_masks_set_edit_mode_single_form(crea_module, form->formid, DT_MASKS_EDIT_FULL);
+        else
+          dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
         dt_masks_iop_update(crea_module);
         gui->creation_module = NULL;
       }
       else
       {
         dt_dev_masks_selection_change(darktable.develop, form->formid, TRUE);
+      }
+
+      if(gui->creation_continuous)
+      {
+        dt_masks_form_t *form_new = dt_masks_create(form->type);
+        dt_masks_change_form_gui(form_new);
+
+        darktable.develop->form_gui->creation = TRUE;
+        darktable.develop->form_gui->creation_module = gui->creation_continuous_module;
+      }
+      else if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
+      {
+        dt_masks_form_t *grp = darktable.develop->form_visible;
+        if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
+        int pos3 = 0, pos2 = -1;
+        GList *fs = g_list_first(grp->points);
+        while(fs)
+        {
+          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          if(pt->formid == form->formid)
+          {
+            pos2 = pos3;
+            break;
+          }
+          pos3++;
+          fs = g_list_next(fs);
+        }
+        if(pos2 < 0) return 1;
+        dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
+        if(!gui2) return 1;
+        gui2->group_selected = pos2;
+
+        dt_masks_select_form(crea_module, dt_masks_get_from_id(darktable.develop, form->formid));
       }
     }
     else
@@ -1605,6 +1761,9 @@ static int dt_brush_events_button_released(struct dt_iop_module_t *module, float
       gui->guipoints = NULL;
       gui->guipoints_payload = NULL;
       gui->guipoints_count = 0;
+
+      gui->creation_continuous = FALSE;
+      gui->creation_continuous_module = NULL;
 
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
       dt_masks_iop_update(module);
@@ -1795,11 +1954,6 @@ static int dt_brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       dt_masks_dynbuf_add(gui->guipoints_payload, pressure);
       gui->guipoints_count++;
     }
-    else
-    {
-      gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
-    }
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -1925,8 +2079,6 @@ static int dt_brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   }
   else if(gui->form_dragging || gui->source_dragging)
   {
-    gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-    gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -2053,19 +2205,19 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       if(!form) return;
 
       float masks_border;
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         masks_border = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_border"), 0.5f);
       else
         masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/border"), 0.5f);
 
       float masks_hardness;
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         masks_hardness = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_hardness"), 1.0f);
       else
         masks_hardness = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/hardness"), 1.0f);
 
       float masks_density;
-      if(form->type & DT_MASKS_CLONE)
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         masks_density = MIN(dt_conf_get_float("plugins/darkroom/spots/brush_density"), 1.0f);
       else
         masks_density = MIN(dt_conf_get_float("plugins/darkroom/masks/brush/density"), 1.0f);
@@ -2074,13 +2226,10 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       float radius2 = masks_border * MIN(wd, ht);
 
       float xpos, ypos;
-      if(gui->posx == 0 && gui->posy == 0)
+      if(gui->posx == -1.f && gui->posy == -1.f)
       {
-        float zoom_x, zoom_y;
-        zoom_y = dt_control_get_dev_zoom_y();
-        zoom_x = dt_control_get_dev_zoom_x();
-        xpos = (.5f + zoom_x) * wd;
-        ypos = (.5f + zoom_y) * ht;
+        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
+        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
       }
       else
       {
@@ -2098,6 +2247,14 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       cairo_set_dash(cr, dashed, len, 0);
       cairo_arc(cr, xpos, ypos, radius2, 0, 2.0 * M_PI);
       cairo_stroke(cr);
+
+      if(form->type & DT_MASKS_CLONE)
+      {
+        float x = 0.f, y = 0.f;
+        dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+      }
+
       cairo_restore(cr);
     }
     else
@@ -2209,6 +2366,15 @@ static void dt_brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                 guipoints[2 * (gui->guipoints_count - 1) + 1], masks_border * MIN(wd, ht), 0,
                 2.0 * M_PI);
       cairo_stroke(cr);
+
+      if(darktable.develop->form_visible && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
+      {
+        const int i = gui->guipoints_count - 1;
+        float x = 0.f, y = 0.f;
+        dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, guipoints[0], guipoints[1], guipoints[i * 2],
+                                            guipoints[i * 2 + 1], &x, &y, TRUE);
+        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+      }
 
       cairo_restore(cr);
     }

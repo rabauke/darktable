@@ -559,6 +559,7 @@ static void dt_dev_change_image(dt_develop_t *dev, const uint32_t imgid)
   if(!dev->form_gui)
   {
     dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    dt_masks_init_form_gui(dev->form_gui);
   }
   dt_masks_change_form_gui(NULL);
 
@@ -815,6 +816,7 @@ static gboolean zoom_key_accel(GtkAccelGroup *accel_group, GObject *acceleratabl
       dt_dev_invalidate(dev);
       break;
     case 2:
+      zoom_x = zoom_y = 0.0f;
       dt_control_set_dev_zoom(DT_ZOOM_FILL);
       dt_dev_check_zoom_bounds(dev, &zoom_x, &zoom_y, DT_ZOOM_FILL, 0, NULL, NULL);
       dt_control_set_dev_zoom_x(zoom_x);
@@ -1680,6 +1682,7 @@ void enter(dt_view_t *self)
   if(!dev->form_gui)
   {
     dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    dt_masks_init_form_gui(dev->form_gui);
   }
   dt_masks_change_form_gui(NULL);
   dev->form_gui->pipe_hash = 0;
@@ -1861,6 +1864,7 @@ void leave(dt_view_t *self)
   // cleanup visible masks
   if(dev->form_gui)
   {
+    dev->gui_module = NULL; // modules have already been free()
     dt_masks_clear_form_gui(dev);
     free(dev->form_gui);
     dev->form_gui = NULL;
@@ -1880,6 +1884,13 @@ void mouse_leave(dt_view_t *self)
   // if we are not hovering over a thumbnail in the filmstrip -> show metadata of opened image.
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_set_mouse_over_id(dev->image_storage.id);
+
+  // masks
+  int handled = dt_masks_events_mouse_leave(dev->gui_module);
+  if(handled) return;
+  // module
+  if(dev->gui_module && dev->gui_module->mouse_leave)
+    handled = dev->gui_module->mouse_leave(dev->gui_module);
 
   // reset any changes the selected plugin might have made.
   dt_control_change_cursor(GDK_LEFT_PTR);
@@ -1909,6 +1920,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   int handled = 0;
   x += offx;
   y += offy;
+
   if(dev->gui_module && dev->gui_module->request_color_pick != DT_REQUEST_COLORPICK_OFF && ctl->button_down
      && ctl->button_down_which == 1)
   {
@@ -1935,7 +1947,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     return;
   }
   // masks
-  if(dev->form_visible) handled = dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which);
+  handled = dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which);
   if(handled) return;
   // module
   if(dev->gui_module && dev->gui_module->mouse_moved)
@@ -2185,6 +2197,11 @@ int key_released(dt_view_t *self, guint key, guint state)
     dt_dev_invalidate(darktable.develop);
     dt_control_queue_redraw_center();
   }
+  // add an option to allow skip mouse events while editing masks
+  if(key == accels->darkroom_skip_mouse_events.accel_key && state == accels->darkroom_skip_mouse_events.accel_mods)
+  {
+    darktable.develop->darkroom_skip_mouse_events = FALSE;
+  }
 
   return 1;
 }
@@ -2290,6 +2307,13 @@ int key_pressed(dt_view_t *self, guint key, guint state)
     return 1;
   }
 
+  // add an option to allow skip mouse events while editing masks
+  if(key == accels->darkroom_skip_mouse_events.accel_key && state == accels->darkroom_skip_mouse_events.accel_mods)
+  {
+    darktable.develop->darkroom_skip_mouse_events = TRUE;
+    return 1;
+  }
+
   return 1;
 }
 
@@ -2348,6 +2372,8 @@ void init_key_accels(dt_view_t *self)
   dt_accel_register_view(self, NC_("accel", "undo"), GDK_KEY_z, GDK_CONTROL_MASK);
   dt_accel_register_view(self, NC_("accel", "redo"), GDK_KEY_y, GDK_CONTROL_MASK);
 
+  // add an option to allow skip mouse events while editing masks
+  dt_accel_register_view(self, NC_("accel", "allow to pan & zoom while editing masks"), GDK_KEY_a, 0);
 }
 
 static gboolean _darkroom_undo_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,

@@ -835,11 +835,61 @@ static int dt_path_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, f
                                  border_count, source);
 }
 
+// set the initial source position value for a clone mask
+static void dt_path_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
+                                                 dt_masks_point_path_t *path)
+{
+  // if this is the first time the relative pos is used
+  if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
+  {
+    // if is has not been defined by the user, set some default
+    if(gui->posx_source == -1.f && gui->posy_source == -1.f)
+    {
+      form->source[0] = path->corner[0] + 0.02f;
+      form->source[1] = path->corner[1] + 0.02f;
+    }
+    else
+    {
+      // if a position was defined by the user, use the absolute value the first time
+      float pts_src[2] = { gui->posx_source, gui->posy_source };
+      dt_dev_distort_backtransform(darktable.develop, pts_src, 1);
+
+      form->source[0] = pts_src[0] / darktable.develop->preview_pipe->iwidth;
+      form->source[1] = pts_src[1] / darktable.develop->preview_pipe->iheight;
+    }
+
+    // save the relative value for the next time
+    gui->posx_source = form->source[0] - path->corner[0];
+    gui->posy_source = form->source[1] - path->corner[1];
+
+    gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE;
+  }
+  else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
+  {
+    // original pos was already defined and relative value calculated, just use it
+    form->source[0] = path->corner[0] + gui->posx_source;
+    form->source[1] = path->corner[1] + gui->posy_source;
+  }
+  else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
+  {
+    // an absolute position was defined by the user
+    float pts_src[2] = { gui->posx_source, gui->posy_source };
+    dt_dev_distort_backtransform(darktable.develop, pts_src, 1);
+
+    form->source[0] = pts_src[0] / darktable.develop->preview_pipe->iwidth;
+    form->source[1] = pts_src[1] / darktable.develop->preview_pipe->iheight;
+  }
+  else
+    fprintf(stderr, "unknown source position type\n");
+}
+
 static int dt_path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                          uint32_t state, dt_masks_form_t *form, int parentid,
                                          dt_masks_form_gui_t *gui, int index)
 {
-  if(gui->form_selected)
+  // resize a shape even if on a node or segment
+  if(gui->form_selected || gui->point_selected >= 0 || gui->feather_selected >= 0 || gui->seg_selected >= 0
+     || gui->point_border_selected >= 0)
   {
     // we register the current position
     if(gui->scrollx == 0.0f && gui->scrolly == 0.0f)
@@ -871,7 +921,7 @@ static int dt_path_events_mouse_scrolled(struct dt_iop_module_t *module, float p
           point->border[0] *= amount;
           point->border[1] *= amount;
         }
-        if(form->type & DT_MASKS_CLONE)
+        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
         {
           float masks_border = dt_conf_get_float("plugins/darkroom/spots/path_border");
           masks_border = MAX(0.005f, MIN(masks_border * amount, 0.5f));
@@ -964,16 +1014,28 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
   if(!gpt) return 0;
 
   float masks_border;
-  if(form->type & DT_MASKS_CLONE)
+  if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/spots/path_border"), 0.5f);
   else
     masks_border = MIN(dt_conf_get_float("plugins/darkroom/masks/path/border"), 0.5f);
 
-  if(gui->creation && (which == 3 || gui->creation_closing_form))
+  if(gui->creation && which == 1 && (state & (GDK_CONTROL_MASK | GDK_SHIFT_MASK)))
+  {
+    // set some absolute or relative position for the source of the clone mask
+    if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
+
+    return 1;
+  }
+  else if(gui->creation && (which == 3 || gui->creation_closing_form))
   {
     // we don't want a form with less than 3 points
     if(g_list_length(form->points) < 4)
     {
+      // we don't really have a way to know if the user wants to cancel the continuous add here
+      // or just cancelling this mask, let's assume that this is not a mistake and cancel
+      // the continuous add
+      gui->creation_continuous = FALSE;
+      gui->creation_continuous_module = NULL;
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
       dt_masks_iop_update(module);
       dt_control_queue_redraw_center();
@@ -997,7 +1059,10 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
       {
         dt_dev_add_history_item(darktable.develop, crea_module, TRUE);
         // and we switch in edit mode to show all the forms
-        dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
+        if(gui->creation_continuous)
+          dt_masks_set_edit_mode_single_form(crea_module, form->formid, DT_MASKS_EDIT_FULL);
+        else
+          dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
         dt_masks_iop_update(crea_module);
         gui->creation_module = NULL;
       }
@@ -1005,6 +1070,40 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
       {
         dt_dev_masks_selection_change(darktable.develop, form->formid, TRUE);
       }
+
+      if(gui->creation_continuous)
+      {
+        dt_masks_form_t *form_new = dt_masks_create(form->type);
+        dt_masks_change_form_gui(form_new);
+
+        darktable.develop->form_gui->creation = TRUE;
+        darktable.develop->form_gui->creation_module = gui->creation_continuous_module;
+      }
+      else if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
+      {
+        dt_masks_form_t *grp = darktable.develop->form_visible;
+        if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
+        int pos3 = 0, pos2 = -1;
+        GList *fs = g_list_first(grp->points);
+        while(fs)
+        {
+          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          if(pt->formid == form->formid)
+          {
+            pos2 = pos3;
+            break;
+          }
+          pos3++;
+          fs = g_list_next(fs);
+        }
+        if(pos2 < 0) return 1;
+        dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
+        if(!gui2) return 1;
+        gui2->group_selected = pos2;
+        
+        dt_masks_select_form(crea_module, dt_masks_get_from_id(darktable.develop, form->formid));
+      }
+      
       dt_control_queue_redraw_center();
     }
   }
@@ -1037,8 +1136,16 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
         bzpt2->border[0] = bzpt2->border[1] = MAX(0.005f, masks_border);
         bzpt2->state = DT_MASKS_POINT_STATE_NORMAL;
         form->points = g_list_append(form->points, bzpt2);
-        form->source[0] = bzpt->corner[0] + 0.02f;
-        form->source[1] = bzpt->corner[1] + 0.02f;
+
+        if(form->type & DT_MASKS_CLONE)
+        {
+          dt_path_set_source_pos_initial_value(gui, form, bzpt2);
+        }
+        else
+        {
+          // not used by regular masks
+          form->source[0] = form->source[1] = 0.0f;
+        }
         nb++;
       }
       form->points = g_list_append(form->points, bzpt);
@@ -1069,8 +1176,6 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
       if(!gpt) return 0;
       // we start the form dragging
       gui->source_dragging = TRUE;
-      gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
       gui->dx = gpt->source[2] - gui->posx;
       gui->dy = gpt->source[3] - gui->posy;
       return 1;
@@ -1079,8 +1184,6 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
     {
       gui->form_dragging = TRUE;
       gui->point_edited = -1;
-      gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
       gui->dx = gpt->points[2] - gui->posx;
       gui->dy = gpt->points[3] - gui->posy;
       return 1;
@@ -1176,8 +1279,6 @@ static int dt_path_events_button_pressed(struct dt_iop_module_t *module, float p
       {
         // we move the entire segment
         gui->seg_dragging = gui->seg_selected;
-        gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-        gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
         gui->dx = gpt->points[gui->seg_selected * 6 + 2] - gui->posx;
         gui->dy = gpt->points[gui->seg_selected * 6 + 3] - gui->posy;
       }
@@ -1609,8 +1710,6 @@ static int dt_path_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   }
   else if(gui->form_dragging || gui->source_dragging)
   {
-    gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-    gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -1887,6 +1986,37 @@ static void dt_path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       cairo_set_source_rgba(cr, .3, .3, .3, .8);
       cairo_set_dash(cr, dashed, 0, 0);
       cairo_stroke(cr);
+    }
+  }
+
+  // draw a cross where the source will be created
+  if(gui->creation && darktable.develop->form_visible && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
+  {
+    const int k = nb - 1;
+    if((k * 6 + 2) >= 0)
+    {
+      float x = 0.f, y = 0.f;
+      dt_masks_calculate_source_pos_value(gui, DT_MASKS_PATH, gpt->points[2] + dx, gpt->points[3] + dy,
+                                          gpt->points[k * 6 + 2] + dx, gpt->points[k * 6 + 3] + dy, &x, &y, TRUE);
+      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+    }
+    else
+    {
+      float xpos, ypos;
+      if(gui->posx == -1.f && gui->posy == -1.f)
+      {
+        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
+        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
+      }
+      else
+      {
+        xpos = gui->posx;
+        ypos = gui->posy;
+      }
+
+      float x = 0.f, y = 0.f;
+      dt_masks_calculate_source_pos_value(gui, DT_MASKS_PATH, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
     }
   }
 
