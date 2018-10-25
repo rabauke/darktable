@@ -60,9 +60,9 @@ typedef struct dt_iop_basecurve_params_t
   dt_iop_basecurve_node_t basecurve[3][MAXNODES];
   int basecurve_nodes[3];
   int basecurve_type[3];
-  int exposure_fusion;  // number of exposure fusion steps
-  float exposure_stops; // number of stops between fusion images
-  float exposure_bias;  // whether to do exposure-fusion with over or under-exposure
+  int exposure_fusion;    // number of exposure fusion steps
+  float exposure_stops;   // number of stops between fusion images
+  float exposure_bias;    // whether to do exposure-fusion with over or under-exposure
 } dt_iop_basecurve_params_t;
 
 typedef struct dt_iop_basecurve_params3_t
@@ -94,8 +94,8 @@ typedef struct dt_iop_basecurve_params1_t
   int tonecurve_preset;
 } dt_iop_basecurve_params1_t;
 
-int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version, void *new_params,
-                  const int new_version)
+int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,
+                  void *new_params, const int new_version)
 {
   if(old_version == 1 && new_version == 5)
   {
@@ -105,12 +105,10 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
     // start with a fresh copy of default parameters
     // unfortunately default_params aren't inited at this stage.
     *n = (dt_iop_basecurve_params_t){ {
-                                          { { 0.0, 0.0 }, { 1.0, 1.0 } },
+                                        { { 0.0, 0.0 }, { 1.0, 1.0 } },
                                       },
                                       { 2, 3, 3 },
-                                      { MONOTONE_HERMITE, MONOTONE_HERMITE, MONOTONE_HERMITE },
-                                      0,
-                                      1 };
+                                      { MONOTONE_HERMITE, MONOTONE_HERMITE, MONOTONE_HERMITE } , 0, 1};
     for(int k = 0; k < 6; k++) n->basecurve[0][k].x = o->tonecurve_x[k];
     for(int k = 0; k < 6; k++) n->basecurve[0][k].y = o->tonecurve_y[k];
     n->basecurve_nodes[0] = 6;
@@ -180,61 +178,65 @@ typedef struct basecurve_preset_t
   int filter;
 } basecurve_preset_t;
 
+#define m MONOTONE_HERMITE
+
 static const basecurve_preset_t basecurve_camera_presets[] = {
   // copy paste your measured basecurve line at the top here, like so (note the exif data and the last 1):
   // clang-format off
-    // nikon d750 by Edouard Gomez
-    { "Nikon D750",           "NIKON CORPORATION", "NIKON D750",           0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.018124, 0.026126 }, { 0.143357, 0.370145 }, { 0.330116, 0.730507 }, { 0.457952, 0.853462 }, { 0.734950, 0.965061 }, { 0.904758, 0.985699 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by Stefan Kauerauf
-    { "Nikon D5100",          "NIKON CORPORATION", "NIKON D5100",          0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.001113, 0.000506 }, { 0.002842, 0.001338 }, { 0.005461, 0.002470 }, { 0.011381, 0.006099 }, { 0.013303, 0.007758 }, { 0.034638, 0.041119 }, { 0.044441, 0.063882 }, { 0.070338, 0.139639 }, { 0.096068, 0.210915 }, { 0.137693, 0.310295 }, { 0.206041, 0.432674 }, { 0.255508, 0.504447 }, { 0.302770, 0.569576 }, { 0.425625, 0.726755 }, { 0.554526, 0.839541 }, { 0.621216, 0.882839 }, { 0.702662, 0.927072 }, { 0.897426, 0.990984 }, { 1.000000, 1.000000 }}}, { 20 }, { MONOTONE_HERMITE }}, 0, 1 },
-    // nikon d7000 by Edouard Gomez
-    { "Nikon D7000",          "NIKON CORPORATION", "NIKON D7000",          0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.001943, 0.003040 }, { 0.019814, 0.028810 }, { 0.080784, 0.210476 }, { 0.145700, 0.383873 }, { 0.295961, 0.654041 }, { 0.651915, 0.952819 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    // nikon d7200 standard by Ralf Brown (firmware 1.00)
-    { "Nikon D7200",          "NIKON CORPORATION", "NIKON D7200",          0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.001604, 0.001334 }, { 0.007401, 0.005237 }, { 0.009474, 0.006890 }, { 0.017348, 0.017176 }, { 0.032782, 0.044336 }, { 0.048033, 0.086548 }, { 0.075803, 0.168331 }, { 0.109539, 0.273539 }, { 0.137373, 0.364645 }, { 0.231651, 0.597511 }, { 0.323797, 0.736475 }, { 0.383796, 0.805797 }, { 0.462284, 0.872247 }, { 0.549844, 0.918328 }, { 0.678855, 0.962361 }, { 0.817445, 0.990406 }, { 1.000000, 1.000000 }}},                                                 { 18 }, { MONOTONE_HERMITE }}, 1, 1 },
-    // sony rx100m2 by Günther R.
-    { "Sony DSC-RX100M2",     "SONY",              "DSC-RX100M2",          0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.015106, 0.008116 }, { 0.070077, 0.093725 }, { 0.107484, 0.170723 }, { 0.191528, 0.341093 }, { 0.257996, 0.458453 }, { 0.305381, 0.537267 }, { 0.326367, 0.569257 }, { 0.448067, 0.723742 }, { 0.509627, 0.777966 }, { 0.676751, 0.898797 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                 { 12 }, { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by matthias bodenbinder
-    { "Canon EOS 6D",         "Canon",             "Canon EOS 6D",         0, FLT_MAX, {{{{ 0.000000, 0.002917 }, { 0.000751, 0.001716 }, { 0.006011, 0.004438 }, { 0.020286, 0.021725 }, { 0.048084, 0.085918 }, { 0.093914, 0.233804 }, { 0.162284, 0.431375 }, { 0.257701, 0.629218 }, { 0.384673, 0.800332 }, { 0.547709, 0.917761 }, { 0.751315, 0.988132 }, { 1.000000, 0.999943 }}},                                                                                                                                                                                                 { 12 }, { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by Dan Torop
-    { "Fujifilm X100S",       "Fujifilm",          "X100S",                0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.009145, 0.007905 }, { 0.026570, 0.032201 }, { 0.131526, 0.289717 }, { 0.175858, 0.395263 }, { 0.350981, 0.696899 }, { 0.614997, 0.959451 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    { "Fujifilm X100T",       "Fujifilm",          "X100T",                0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.009145, 0.007905 }, { 0.026570, 0.032201 }, { 0.131526, 0.289717 }, { 0.175858, 0.395263 }, { 0.350981, 0.696899 }, { 0.614997, 0.959451 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by Johannes Hanika
-    { "Canon EOS 5D Mark II", "Canon",             "Canon EOS 5D Mark II", 0, FLT_MAX, {{{{ 0.000000, 0.000366 }, { 0.006560, 0.003504 }, { 0.027310, 0.029834 }, { 0.045915, 0.070230 }, { 0.206554, 0.539895 }, { 0.442337, 0.872409 }, { 0.673263, 0.971703 }, { 1.000000, 0.999832 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by chrik5
-    { "Pentax K-5",           "Pentax",            "Pentax K-5",           0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.004754, 0.002208 }, { 0.009529, 0.004214 }, { 0.023713, 0.013508 }, { 0.031866, 0.020352 }, { 0.046734, 0.034063 }, { 0.059989, 0.052413 }, { 0.088415, 0.096030 }, { 0.136610, 0.190629 }, { 0.174480, 0.256484 }, { 0.205192, 0.307430 }, { 0.228896, 0.348447 }, { 0.286411, 0.428680 }, { 0.355314, 0.513527 }, { 0.440014, 0.607651 }, { 0.567096, 0.732791 }, { 0.620597, 0.775968 }, { 0.760355, 0.881828 }, { 0.875139, 0.960682 }, { 1.000000, 1.000000 }}}, { 20 }, { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by Togan Muftuoglu - ed: slope is too aggressive on shadows
-    //{ "Nikon D90", "NIKON", "D90", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.015520, 0.012248 }, { 0.097950, 0.251013 }, { 0.301515, 0.621951 }, { 0.415513, 0.771384 }, { 0.547326, 0.843079 }, { 0.819769, 0.956678 }, { 1.000000, 1.000000 } } }, { 8 }, { MONOTONE_HERMITE } }, 0, 1 },
-    // contributed by Edouard Gomez
-    { "Nikon D90",            "NIKON CORPORATION", "NIKON D90",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.011702, 0.012659 }, { 0.122918, 0.289973 }, { 0.153642, 0.342731 }, { 0.246855, 0.510114 }, { 0.448958, 0.733820 }, { 0.666759, 0.894290 }, { 1.000000, 1.000000 }}},                                                                                                                                                                                                                                                                                                 { 8 },  { MONOTONE_HERMITE }}, 0, 1 },
-    // contributed by Pascal Obry
-    { "Nikon D800",           "NIKON",             "D800",                 0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.001773, 0.001936 }, { 0.009671, 0.009693 }, { 0.016754, 0.020617 }, { 0.024884, 0.037309 }, { 0.048174, 0.107768 }, { 0.056932, 0.139532 }, { 0.085504, 0.233303 }, { 0.130378, 0.349747 }, { 0.155476, 0.405445 }, { 0.175245, 0.445918 }, { 0.217657, 0.516873 }, { 0.308475, 0.668608 }, { 0.375381, 0.754058 }, { 0.459858, 0.839909 }, { 0.509567, 0.881543 }, { 0.654394, 0.960877 }, { 0.783380, 0.999161 }, { 0.859310, 1.000000 }, { 1.000000, 1.000000 }}}, { 20 }, { MONOTONE_HERMITE }}, 0, 1 },
+
+  // nikon d750 by Edouard Gomez
+  {"Nikon D750", "NIKON CORPORATION", "NIKON D750", 0, FLT_MAX, {{{{0.000000, 0.000000}, {0.018124, 0.026126}, {0.143357, 0.370145}, {0.330116, 0.730507}, {0.457952, 0.853462}, {0.734950, 0.965061}, {0.904758, 0.985699}, {1.000000, 1.000000}}}, {8}, {m}}, 0, 1},
+  // contributed by Stefan Kauerauf
+  {"Nikon D5100", "NIKON CORPORATION", "NIKON D5100", 0, FLT_MAX, {{{{0.000000, 0.000000}, {0.001113, 0.000506}, {0.002842, 0.001338}, {0.005461, 0.002470}, {0.011381, 0.006099}, {0.013303, 0.007758}, {0.034638, 0.041119}, {0.044441, 0.063882}, {0.070338, 0.139639}, {0.096068, 0.210915}, {0.137693, 0.310295}, {0.206041, 0.432674}, {0.255508, 0.504447}, {0.302770, 0.569576}, {0.425625, 0.726755}, {0.554526, 0.839541}, {0.621216, 0.882839}, {0.702662, 0.927072}, {0.897426, 0.990984}, {1.000000, 1.000000}}}, {20}, {m}}, 0, 1},
+  // nikon d7000 by Edouard Gomez
+  {"Nikon D7000", "NIKON CORPORATION", "NIKON D7000", 0, FLT_MAX, {{{{0.000000, 0.000000}, {0.001943, 0.003040}, {0.019814, 0.028810}, {0.080784, 0.210476}, {0.145700, 0.383873}, {0.295961, 0.654041}, {0.651915, 0.952819}, {1.000000, 1.000000}}}, {8}, {m}}, 0, 1},
+  // nikon d7200 standard by Ralf Brown (firmware 1.00)
+  {"Nikon D7200", "NIKON CORPORATION", "NIKON D7200", 0, FLT_MAX, {{{{0.000000, 0.000000}, {0.001604, 0.001334}, {0.007401, 0.005237}, {0.009474, 0.006890}, {0.017348, 0.017176}, {0.032782, 0.044336}, {0.048033, 0.086548}, {0.075803, 0.168331}, {0.109539, 0.273539}, {0.137373, 0.364645}, {0.231651, 0.597511}, {0.323797, 0.736475}, {0.383796, 0.805797}, {0.462284, 0.872247}, {0.549844, 0.918328}, {0.678855, 0.962361}, {0.817445, 0.990406}, {1.000000, 1.000000}}}, {18}, {m}}, 1, 1},
+  // sony rx100m2 by Günther R.
+  { "Sony DSC-RX100M2", "SONY", "DSC-RX100M2", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.015106, 0.008116 }, { 0.070077, 0.093725 }, { 0.107484, 0.170723 }, { 0.191528, 0.341093 }, { 0.257996, 0.458453 }, { 0.305381, 0.537267 }, { 0.326367, 0.569257 }, { 0.448067, 0.723742 }, { 0.509627, 0.777966 }, { 0.676751, 0.898797 }, { 1.000000, 1.000000 } } }, { 12 }, { m } }, 0, 1 },
+  // contributed by matthias bodenbinder
+  { "Canon EOS 6D", "Canon", "Canon EOS 6D", 0, FLT_MAX, { { { { 0.000000, 0.002917 }, { 0.000751, 0.001716 }, { 0.006011, 0.004438 }, { 0.020286, 0.021725 }, { 0.048084, 0.085918 }, { 0.093914, 0.233804 }, { 0.162284, 0.431375 }, { 0.257701, 0.629218 }, { 0.384673, 0.800332 }, { 0.547709, 0.917761 }, { 0.751315, 0.988132 }, { 1.000000, 0.999943 } } }, { 12 }, { m } }, 0, 1 },
+  // contributed by Dan Torop
+  { "Fujifilm X100S", "Fujifilm", "X100S", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.009145, 0.007905 }, { 0.026570, 0.032201 }, { 0.131526, 0.289717 }, { 0.175858, 0.395263 }, { 0.350981, 0.696899 }, { 0.614997, 0.959451 }, { 1.000000, 1.000000 } } }, { 8 }, { m } }, 0, 1 },
+  { "Fujifilm X100T", "Fujifilm", "X100T", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.009145, 0.007905 }, { 0.026570, 0.032201 }, { 0.131526, 0.289717 }, { 0.175858, 0.395263 }, { 0.350981, 0.696899 }, { 0.614997, 0.959451 }, { 1.000000, 1.000000 } } }, { 8 }, { m } }, 0, 1 },
+  // contributed by Johannes Hanika
+  { "Canon EOS 5D Mark II", "Canon", "Canon EOS 5D Mark II", 0, FLT_MAX, { { { { 0.000000, 0.000366 }, { 0.006560, 0.003504 }, { 0.027310, 0.029834 }, { 0.045915, 0.070230 }, { 0.206554, 0.539895 }, { 0.442337, 0.872409 }, { 0.673263, 0.971703 }, { 1.000000, 0.999832 } } }, { 8 }, { m } }, 0, 1 },
+  // contributed by chrik5
+  { "Pentax K-5", "Pentax", "Pentax K-5", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.004754, 0.002208 }, { 0.009529, 0.004214 }, { 0.023713, 0.013508 }, { 0.031866, 0.020352 }, { 0.046734, 0.034063 }, { 0.059989, 0.052413 }, { 0.088415, 0.096030 }, { 0.136610, 0.190629 }, { 0.174480, 0.256484 }, { 0.205192, 0.307430 }, { 0.228896, 0.348447 }, { 0.286411, 0.428680 }, { 0.355314, 0.513527 }, { 0.440014, 0.607651 }, { 0.567096, 0.732791 }, { 0.620597, 0.775968 }, { 0.760355, 0.881828 }, { 0.875139, 0.960682 }, { 1.000000, 1.000000 } } }, { 20 }, { m } }, 0, 1 },
+  // contributed by Togan Muftuoglu - ed: slope is too aggressive on shadows
+  //{ "Nikon D90", "NIKON", "D90", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.015520, 0.012248 }, { 0.097950, 0.251013 }, { 0.301515, 0.621951 }, { 0.415513, 0.771384 }, { 0.547326, 0.843079 }, { 0.819769, 0.956678 }, { 1.000000, 1.000000 } } }, { 8 }, { m } }, 0, 1 },
+  // contributed by Edouard Gomez
+  {"Nikon D90", "NIKON CORPORATION", "NIKON D90", 0, FLT_MAX, {{{{0.000000, 0.000000}, {0.011702, 0.012659}, {0.122918, 0.289973}, {0.153642, 0.342731}, {0.246855, 0.510114}, {0.448958, 0.733820}, {0.666759, 0.894290}, {1.000000, 1.000000}}}, {8}, {m}}, 0, 1},
+  // contributed by Pascal Obry
+  { "Nikon D800", "NIKON", "D800", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.001773, 0.001936 }, { 0.009671, 0.009693 }, { 0.016754, 0.020617 }, { 0.024884, 0.037309 }, { 0.048174, 0.107768 }, { 0.056932, 0.139532 }, { 0.085504, 0.233303 }, { 0.130378, 0.349747 }, { 0.155476, 0.405445 }, { 0.175245, 0.445918 }, { 0.217657, 0.516873 }, { 0.308475, 0.668608 }, { 0.375381, 0.754058 }, { 0.459858, 0.839909 }, { 0.509567, 0.881543 }, { 0.654394, 0.960877 }, { 0.783380, 0.999161 }, { 0.859310, 1.000000 }, { 1.000000, 1.000000 } } }, { 20 }, { m } }, 0, 1 },
   // clang-format on
 };
 static const int basecurve_camera_presets_cnt = sizeof(basecurve_camera_presets) / sizeof(basecurve_preset_t);
 
 static const basecurve_preset_t basecurve_presets[] = {
   // clang-format off
-    // smoother cubic spline curve
-    { N_("cubic spline"), "",                      "",            0, FLT_MAX, {{{{ 0.0,      0.0 },      { 1.0,      1.0 },      { 0.f,      0.f },      { 0.f,      0.f },      { 0.f,      0.f },      { 0.f,      0.f }, { 0.f, 0.f }, { 0.f, 0.f }}}, { 2 }, { CUBIC_SPLINE }},     0, 0 },
-    { neutral,            "",                      "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.005000, 0.002500 }, { 0.150000, 0.300000 }, { 0.400000, 0.700000 }, { 0.750000, 0.950000 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 0, 1 },
-    { canon_eos,          "Canon",                 "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.028226, 0.029677 }, { 0.120968, 0.232258 }, { 0.459677, 0.747581 }, { 0.858871, 0.967742 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { canon_eos_alt,      "Canon",                 "EOS 5D Mark", 0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.026210, 0.029677 }, { 0.108871, 0.232258 }, { 0.350806, 0.747581 }, { 0.669355, 0.967742 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { nikon,              "NIKON",                 "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.036290, 0.036532 }, { 0.120968, 0.228226 }, { 0.459677, 0.759678 }, { 0.858871, 0.983468 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { nikon_alt,          "NIKON",                 "D____",       0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.012097, 0.007322 }, { 0.072581, 0.130742 }, { 0.310484, 0.729291 }, { 0.611321, 0.951613 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { sony_alpha,         "SONY",                  "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.031949, 0.036532 }, { 0.105431, 0.228226 }, { 0.434505, 0.759678 }, { 0.855738, 0.983468 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { pentax,             "PENTAX",                "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.032258, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { ricoh,              "RICOH",                 "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.032259, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { olympus,            "OLYMPUS",               "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.033962, 0.028226 }, { 0.249057, 0.439516 }, { 0.501887, 0.798387 }, { 0.750943, 0.955645 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { olympus_alt,        "OLYMPUS",               "E-M",         0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.012097, 0.010322 }, { 0.072581, 0.167742 }, { 0.310484, 0.711291 }, { 0.645161, 0.956855 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { panasonic,          "Panasonic",             "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.036290, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { leica,              "Leica",                 "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.036291, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { kodak_easyshare,    "EASTMAN KODAK COMPANY", "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.044355, 0.020967 }, { 0.133065, 0.154322 }, { 0.209677, 0.300301 }, { 0.572581, 0.753477 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { konica_minolta,     "MINOLTA",               "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.020161, 0.010322 }, { 0.112903, 0.167742 }, { 0.500000, 0.711291 }, { 0.899194, 0.956855 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { samsung,            "SAMSUNG",               "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.040323, 0.029677 }, { 0.133065, 0.232258 }, { 0.447581, 0.747581 }, { 0.842742, 0.967742 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { fujifilm,           "FUJIFILM",              "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.028226, 0.029677 }, { 0.104839, 0.232258 }, { 0.387097, 0.747581 }, { 0.754032, 0.967742 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
-    { nokia,              "Nokia",                 "",            0, FLT_MAX, {{{{ 0.000000, 0.000000 }, { 0.041825, 0.020161 }, { 0.117871, 0.153226 }, { 0.319392, 0.500000 }, { 0.638783, 0.842742 }, { 1.000000, 1.000000 }}},                        { 6 }, { MONOTONE_HERMITE }}, 1, 0 },
+  // smoother cubic spline curve
+  { N_("cubic spline"), "", "", 0, FLT_MAX, { { { { 0.0, 0.0}, { 1.0, 1.0 }, { 0., 0.}, { 0., 0.}, { 0., 0.}, { 0., 0.}, { 0., 0.}, { 0., 0.} } }, { 2 }, { CUBIC_SPLINE } }, 0, 0 },
+  { neutral,         "", "",                      0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.005000, 0.002500 }, { 0.150000, 0.300000 }, { 0.400000, 0.700000 }, { 0.750000, 0.950000 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 0, 1 },
+  { canon_eos,       "Canon", "",                 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.028226, 0.029677 }, { 0.120968, 0.232258 }, { 0.459677, 0.747581 }, { 0.858871, 0.967742 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { canon_eos_alt,   "Canon", "EOS 5D Mark",      0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.026210, 0.029677 }, { 0.108871, 0.232258 }, { 0.350806, 0.747581 }, { 0.669355, 0.967742 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { nikon,           "NIKON", "",                 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.036290, 0.036532 }, { 0.120968, 0.228226 }, { 0.459677, 0.759678 }, { 0.858871, 0.983468 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { nikon_alt,       "NIKON", "D____",            0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.012097, 0.007322 }, { 0.072581, 0.130742 }, { 0.310484, 0.729291 }, { 0.611321, 0.951613 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { sony_alpha,      "SONY", "",                  0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.031949, 0.036532 }, { 0.105431, 0.228226 }, { 0.434505, 0.759678 }, { 0.855738, 0.983468 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { pentax,          "PENTAX", "",                0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.032258, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { ricoh,           "RICOH", "",                 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.032259, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { olympus,         "OLYMPUS", "",               0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.033962, 0.028226 }, { 0.249057, 0.439516 }, { 0.501887, 0.798387 }, { 0.750943, 0.955645 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { olympus_alt,     "OLYMPUS", "E-M",            0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.012097, 0.010322 }, { 0.072581, 0.167742 }, { 0.310484, 0.711291 }, { 0.645161, 0.956855 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { panasonic,       "Panasonic", "",             0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.036290, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { leica,           "Leica", "",                 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.036291, 0.024596 }, { 0.120968, 0.166419 }, { 0.205645, 0.328527 }, { 0.604839, 0.790171 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { kodak_easyshare, "EASTMAN KODAK COMPANY", "", 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.044355, 0.020967 }, { 0.133065, 0.154322 }, { 0.209677, 0.300301 }, { 0.572581, 0.753477 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { konica_minolta,  "MINOLTA", "",               0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.020161, 0.010322 }, { 0.112903, 0.167742 }, { 0.500000, 0.711291 }, { 0.899194, 0.956855 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { samsung,         "SAMSUNG", "",               0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.040323, 0.029677 }, { 0.133065, 0.232258 }, { 0.447581, 0.747581 }, { 0.842742, 0.967742 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { fujifilm,        "FUJIFILM", "",              0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.028226, 0.029677 }, { 0.104839, 0.232258 }, { 0.387097, 0.747581 }, { 0.754032, 0.967742 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
+  { nokia,           "Nokia", "",                 0, FLT_MAX, { { { { 0.000000, 0.000000 }, { 0.041825, 0.020161 }, { 0.117871, 0.153226 }, { 0.319392, 0.500000 }, { 0.638783, 0.842742 }, { 1.000000, 1.000000 } } }, { 6 }, { m } }, 1, 0 },
   // clang-format on
 };
+#undef m
 static const int basecurve_presets_cnt = sizeof(basecurve_presets) / sizeof(basecurve_preset_t);
 
 typedef struct dt_iop_basecurve_gui_data_t
@@ -301,8 +303,7 @@ int flags()
   return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
 }
 
-static void set_presets(dt_iop_module_so_t *self, const basecurve_preset_t *presets, int count,
-                        int *force_autoapply)
+static void set_presets(dt_iop_module_so_t *self, const basecurve_preset_t *presets, int count, int *force_autoapply)
 {
   // transform presets above to db entries.
   for(int k = 0; k < count; k++)
@@ -316,13 +317,13 @@ static void set_presets(dt_iop_module_so_t *self, const basecurve_preset_t *pres
       tmp.exposure_bias = 1.0f;
     }
     // add the preset.
-    dt_gui_presets_add_generic(_(presets[k].name), self->op, self->version(), &tmp,
-                               sizeof(dt_iop_basecurve_params_t), 1);
+    dt_gui_presets_add_generic(_(presets[k].name), self->op, self->version(),
+                               &tmp, sizeof(dt_iop_basecurve_params_t), 1);
     // and restrict it to model, maker, iso, and raw images
-    dt_gui_presets_update_mml(_(presets[k].name), self->op, self->version(), presets[k].maker, presets[k].model,
-                              "");
-    dt_gui_presets_update_iso(_(presets[k].name), self->op, self->version(), presets[k].iso_min,
-                              presets[k].iso_max);
+    dt_gui_presets_update_mml(_(presets[k].name), self->op, self->version(),
+                              presets[k].maker, presets[k].model, "");
+    dt_gui_presets_update_iso(_(presets[k].name), self->op, self->version(),
+                              presets[k].iso_min, presets[k].iso_max);
     dt_gui_presets_update_ldr(_(presets[k].name), self->op, self->version(), FOR_RAW);
     // make it auto-apply for matching images:
     dt_gui_presets_update_autoapply(_(presets[k].name), self->op, self->version(),
@@ -354,9 +355,10 @@ static float exposure_increment(float stops, int e, float fusion, float bias)
 }
 
 #ifdef HAVE_OPENCL
-
-static int gauss_blur_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                         cl_mem dev_out, cl_mem dev_tmp, const int width, const int height)
+static
+int gauss_blur_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                  cl_mem dev_in, cl_mem dev_out, cl_mem dev_tmp,
+                  const int width, const int height)
 {
   dt_iop_basecurve_global_data_t *gd = (dt_iop_basecurve_global_data_t *)self->data;
 
@@ -383,8 +385,10 @@ static int gauss_blur_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *p
   return TRUE;
 }
 
-static int gauss_expand_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                           cl_mem dev_out, cl_mem dev_tmp, const int width, const int height)
+static
+int gauss_expand_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                    cl_mem dev_in, cl_mem dev_out, cl_mem dev_tmp,
+                    const int width, const int height)
 {
   dt_iop_basecurve_global_data_t *gd = (dt_iop_basecurve_global_data_t *)self->data;
 
@@ -402,9 +406,12 @@ static int gauss_expand_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   return gauss_blur_cl(self, piece, dev_out, dev_out, dev_tmp, width, height);
 }
 
-static int gauss_reduce_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                           cl_mem dev_coarse, cl_mem dev_detail, cl_mem dev_tmp1, cl_mem dev_tmp2, const int width,
-                           const int height)
+
+static
+int gauss_reduce_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                    cl_mem dev_in, cl_mem dev_coarse, cl_mem dev_detail,
+                    cl_mem dev_tmp1, cl_mem dev_tmp2,
+                    const int width, const int height)
 {
   dt_iop_basecurve_global_data_t *gd = (dt_iop_basecurve_global_data_t *)self->data;
 
@@ -412,7 +419,8 @@ static int gauss_reduce_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   const int devid = piece->pipe->devid;
 
   {
-    if(!gauss_blur_cl(self, piece, dev_in, dev_tmp1, dev_tmp2, width, height)) return FALSE;
+    if(!gauss_blur_cl(self, piece, dev_in, dev_tmp1, dev_tmp2, width, height))
+      return FALSE;
 
     const int cw = (width - 1) / 2 + 1;
     const int ch = (height - 1) / 2 + 1;
@@ -428,7 +436,8 @@ static int gauss_reduce_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
 
   if(dev_detail != NULL)
   {
-    if(!gauss_expand_cl(self, piece, dev_coarse, dev_tmp1, dev_tmp2, width, height)) return FALSE;
+    if(!gauss_expand_cl(self, piece, dev_coarse, dev_tmp1, dev_tmp2, width, height))
+      return FALSE;
 
     size_t sizes[] = { ROUNDUPWD(width), ROUNDUPHT(height), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_detail, 0, sizeof(cl_mem), (void *)&dev_in);
@@ -443,8 +452,9 @@ static int gauss_reduce_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   return TRUE;
 }
 
-static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                             cl_mem dev_out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static
+int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                      const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_basecurve_data_t *d = (dt_iop_basecurve_data_t *)piece->data;
   dt_iop_basecurve_global_data_t *gd = (dt_iop_basecurve_global_data_t *)self->data;
@@ -526,8 +536,7 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
       if(err != CL_SUCCESS) goto error;
 
       dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_compute_features, 0, sizeof(cl_mem), (void *)&dev_tmp1);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_compute_features, 1, sizeof(cl_mem),
-                               (void *)&dev_col[0]);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_compute_features, 1, sizeof(cl_mem), (void *)&dev_col[0]);
       dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_compute_features, 2, sizeof(int), (void *)&width);
       dt_opencl_set_kernel_arg(devid, gd->kernel_basecurve_compute_features, 3, sizeof(int), (void *)&height);
       err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_compute_features, sizes);
@@ -557,7 +566,8 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 
     for(int k = 1, w = width, h = height; k < num_levels; k++)
     {
-      if(!gauss_reduce_cl(self, piece, dev_col[k - 1], dev_col[k], NULL, dev_tmp1, dev_tmp2, w, h)) goto error;
+      if(!gauss_reduce_cl(self, piece, dev_col[k-1], dev_col[k], NULL, dev_tmp1, dev_tmp2, w, h))
+        goto error;
 
       w = (w - 1) / 2 + 1;
       h = (h - 1) / 2 + 1;
@@ -577,7 +587,8 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 
       // dev_col[k+1] -> dev_tmp2[k]
       if(k != num_levels - 1)
-        if(!gauss_expand_cl(self, piece, dev_col[k + 1], dev_tmp2, dev_tmp1, w, h)) goto error;
+        if(!gauss_expand_cl(self, piece, dev_col[k+1], dev_tmp2, dev_tmp1, w, h))
+          goto error;
 
       // blend images into output pyramid
       if(k == num_levels - 1)
@@ -630,6 +641,7 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
       h = (h - 1) / 2 + 1;
     }
 
+    do
     {
       // normalize both gaussian base and laplacian
       size_t sizes[] = { ROUNDUPWD(w), ROUNDUPHT(h), 1 };
@@ -652,7 +664,8 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
       // reconstruct output image
 
       // dev_comb[k+1] -> dev_tmp1
-      if(!gauss_expand_cl(self, piece, dev_comb[k + 1], dev_tmp1, dev_tmp2, w, h)) goto error;
+      if(!gauss_expand_cl(self, piece, dev_comb[k+1], dev_tmp1, dev_tmp2, w, h))
+        goto error;
 
       // dev_comb[k] + dev_tmp1 -> dev_tmp2
       size_t sizes[] = { ROUNDUPWD(w), ROUNDUPHT(h), 1 };
@@ -713,8 +726,9 @@ error:
   return FALSE;
 }
 
-static int process_cl_lut(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in,
-                          cl_mem dev_out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static
+int process_cl_lut(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+                   const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_basecurve_data_t *d = (dt_iop_basecurve_data_t *)piece->data;
   dt_iop_basecurve_global_data_t *gd = (dt_iop_basecurve_global_data_t *)self->data;
@@ -766,7 +780,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 #endif
 
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out, struct dt_develop_tiling_t *tiling)
+                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
+                     struct dt_develop_tiling_t *tiling)
 {
   dt_iop_basecurve_data_t *const d = (dt_iop_basecurve_data_t *)piece->data;
 
@@ -774,7 +789,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   {
     const int rad = MIN(roi_in->width, (int)ceilf(256 * roi_in->scale / piece->iscale));
 
-    tiling->factor = 6.666f; // in + out + col[] + comb[] + 2*tmp
+    tiling->factor = 6.666f;                 // in + out + col[] + comb[] + 2*tmp
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->xalign = 1;
@@ -783,7 +798,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   }
   else
   {
-    tiling->factor = 2.0f; // in + out
+    tiling->factor = 2.0f;                   // in + out
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->xalign = 1;
@@ -793,8 +808,14 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 }
 
 
-static void apply_ev_and_curve(const float *const in, float *const out, const int width, const int height,
-                               const float mul, const float *const table, const float *const unbounded_coeffs)
+static inline void apply_ev_and_curve(
+    const float *const in,
+    float *const out,
+    const int width,
+    const int height,
+    const float mul,
+    const float *const table,
+    const float *const unbounded_coeffs)
 {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static)
@@ -811,101 +832,103 @@ static void apply_ev_and_curve(const float *const in, float *const out, const in
         outp[i] = table[CLAMP((int)(f * 0x10000ul), 0, 0xffff)];
       else if(unbounded_coeffs)
         outp[i] = dt_iop_eval_exp(unbounded_coeffs, f);
-      else
-        outp[i] = 1.0f;
+      else outp[i] = 1.0f;
     }
   }
 }
 
-static void compute_features(float *const col, const int wd, const int ht)
+static inline void compute_features(
+    float *const col,
+    const int wd,
+    const int ht)
 {
   // features are product of
   // 1) well exposedness
   // 2) saturation
   // 3) local contrast (handled in laplacian form later)
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)
+#pragma omp parallel for default(none) schedule(static) collapse(2)
 #endif
-  for(int j = 0; j < ht; j++)
-    for(int i = 0; i < wd; i++)
-    {
-      const size_t x = 4 * ((size_t)wd * j + i);
-      const float max = MAX(col[x], MAX(col[x + 1], col[x + 2]));
-      const float min = MIN(col[x], MIN(col[x + 1], col[x + 2]));
-      const float sat = .1f + .1f * (max - min) / MAX(1e-4f, max);
-      col[x + 3] = sat;
+  for(int j=0;j<ht;j++) for(int i=0;i<wd;i++)
+  {
+    const size_t x = 4*((size_t)wd*j+i);
+    const float max = MAX(col[x], MAX(col[x+1], col[x+2]));
+    const float min = MIN(col[x], MIN(col[x+1], col[x+2]));
+    const float sat = .1f + .1f*(max-min)/MAX(1e-4f, max);
+    col[x+3] = sat;
 
-      const float c = 0.54f;
-      float v = fabsf(col[x] - c);
-      v = MAX(fabsf(col[x + 1] - c), v);
-      v = MAX(fabsf(col[x + 2] - c), v);
-      const float var = 0.5;
-      const float exp = .2f + dt_fast_expf(-v * v / (var * var));
-      col[x + 3] *= exp;
-    }
+    const float c = 0.54f;
+    float v = fabsf(col[x]-c);
+    v = MAX(fabsf(col[x+1]-c), v);
+    v = MAX(fabsf(col[x+2]-c), v);
+    const float var = 0.5;
+    const float exp = .2f + dt_fast_expf(-v*v/(var*var));
+    col[x+3] *= exp;
+  }
 }
 
-static void gauss_blur(const float *const input, float *const output, const size_t wd, const size_t ht)
+static inline void gauss_blur(
+    const float *const input,
+    float *const output,
+    const size_t wd,
+    const size_t ht)
 {
   const float w[5] = { 1.f / 16.f, 4.f / 16.f, 6.f / 16.f, 4.f / 16.f, 1.f / 16.f };
-  float *tmp = dt_alloc_align(64, (size_t)wd * ht * 4 * sizeof(float));
-  memset(tmp, 0, 4 * wd * ht * sizeof(float));
+  float *tmp = dt_alloc_align(64, (size_t)wd*ht*4*sizeof(float));
+  memset(tmp, 0, 4*wd*ht*sizeof(float));
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) shared(tmp)
 #endif
-  for(int j = 0; j < ht; j++)
+  for(int j=0;j<ht;j++)
   { // horizontal pass
     // left borders
-    for(int i = 0; i < 2; i++)
-      for(int c = 0; c < 4; c++)
-        for(int ii = -2; ii <= 2; ii++)
-          tmp[4 * (j * wd + i) + c] += input[4 * (j * wd + MAX(-i - ii, i + ii)) + c] * w[ii + 2];
+    for(int i=0;i<2;i++) for(int c=0;c<4;c++)
+      for(int ii=-2;ii<=2;ii++)
+        tmp[4*(j*wd+i)+c] += input[4*(j*wd+MAX(-i-ii,i+ii))+c] * w[ii+2];
     // most pixels
-    for(int i = 2; i < wd - 2; i++)
-      for(int c = 0; c < 4; c++)
-        for(int ii = -2; ii <= 2; ii++) tmp[4 * (j * wd + i) + c] += input[4 * (j * wd + i + ii) + c] * w[ii + 2];
+    for(int i=2;i<wd-2;i++) for(int c=0;c<4;c++)
+      for(int ii=-2;ii<=2;ii++)
+        tmp[4*(j*wd+i)+c] += input[4*(j*wd+i+ii)+c] * w[ii+2];
     // right borders
-    for(int i = wd - 2; i < wd; i++)
-      for(int c = 0; c < 4; c++)
-        for(int ii = -2; ii <= 2; ii++)
-          tmp[4 * (j * wd + i) + c] += input[4 * (j * wd + MIN(i + ii, wd - (i + ii - wd + 1))) + c] * w[ii + 2];
+    for(int i=wd-2;i<wd;i++) for(int c=0;c<4;c++)
+      for(int ii=-2;ii<=2;ii++)
+        tmp[4*(j*wd+i)+c] += input[4*(j*wd+MIN(i+ii, wd-(i+ii-wd+1) ))+c] * w[ii+2];
   }
-  memset(output, 0, 4 * wd * ht * sizeof(float));
+  memset(output, 0, 4*wd*ht*sizeof(float));
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) shared(tmp)
 #endif
-  for(int i = 0; i < wd; i++)
+  for(int i=0;i<wd;i++)
   { // vertical pass
-    for(int j = 0; j < 2; j++)
-      for(int c = 0; c < 4; c++)
-        for(int jj = -2; jj <= 2; jj++)
-          output[4 * (j * wd + i) + c] += tmp[4 * (MAX(-j - jj, j + jj) * wd + i) + c] * w[jj + 2];
-    for(int j = 2; j < ht - 2; j++)
-      for(int c = 0; c < 4; c++)
-        for(int jj = -2; jj <= 2; jj++)
-          output[4 * (j * wd + i) + c] += tmp[4 * ((j + jj) * wd + i) + c] * w[jj + 2];
-    for(int j = ht - 2; j < ht; j++)
-      for(int c = 0; c < 4; c++)
-        for(int jj = -2; jj <= 2; jj++)
-          output[4 * (j * wd + i) + c] += tmp[4 * (MIN(j + jj, ht - (j + jj - ht + 1)) * wd + i) + c] * w[jj + 2];
+    for(int j=0;j<2;j++) for(int c=0;c<4;c++)
+      for(int jj=-2;jj<=2;jj++)
+        output[4*(j*wd+i)+c] += tmp[4*(MAX(-j-jj,j+jj)*wd+i)+c] * w[jj+2];
+    for(int j=2;j<ht-2;j++) for(int c=0;c<4;c++)
+      for(int jj=-2;jj<=2;jj++)
+        output[4*(j*wd+i)+c] += tmp[4*((j+jj)*wd+i)+c] * w[jj+2];
+    for(int j=ht-2;j<ht;j++) for(int c=0;c<4;c++)
+      for(int jj=-2;jj<=2;jj++)
+        output[4*(j*wd+i)+c] += tmp[4*(MIN(j+jj, ht-(j+jj-ht+1))*wd+i)+c] * w[jj+2];
   }
   dt_free_align(tmp);
 }
 
-static void gauss_expand(const float *const input, // coarse input
-                         float *const fine,        // upsampled, blurry output
-                         const size_t wd,          // fine res
-                         const size_t ht)
+static inline void gauss_expand(
+    const float *const input, // coarse input
+    float *const fine,        // upsampled, blurry output
+    const size_t wd,          // fine res
+    const size_t ht)
 {
-  const size_t cw = (wd - 1) / 2 + 1;
+  const size_t cw = (wd-1)/2+1;
   // fill numbers in even pixels, zero odd ones
-  memset(fine, 0, 4 * wd * ht * sizeof(float));
+  memset(fine, 0, 4*wd*ht*sizeof(float));
 #ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)
+#pragma omp parallel for default(none) schedule(static) collapse(2)
 #endif
-  for(int j = 0; j < ht; j += 2)
-    for(int i = 0; i < wd; i += 2)
-      for(int c = 0; c < 4; c++) fine[4 * (j * wd + i) + c] = 4.0f * input[4 * (j / 2 * cw + i / 2) + c];
+  for(int j=0;j<ht;j+=2)
+    for(int i=0;i<wd;i+=2)
+      for(int c=0;c<4;c++)
+        fine[4*(j*wd+i)+c] = 4.0f * input[4*(j/2*cw + i/2)+c];
 
   // convolve with same kernel weights mul by 4:
   gauss_blur(fine, fine, wd, ht);
@@ -915,22 +938,20 @@ static void gauss_expand(const float *const input, // coarse input
 // XXX FIXME: downsampling will not result in an energy conserving pattern (every 4 pixels one sample)
 // XXX FIXME: neither will a mirror boundary condition (mirrors in subsampled values at random density)
 // TODO: copy laplacian code from local laplacian filters, it's faster.
-static void gauss_reduce(const float *const input, // fine input buffer
-                         float *const coarse,      // coarse scale, blurred input buf
-                         float *const detail,      // detail/laplacian, fine scale, or 0
-                         const size_t wd, const size_t ht)
+static inline void gauss_reduce(
+    const float *const input, // fine input buffer
+    float *const coarse,      // coarse scale, blurred input buf
+    float *const detail,      // detail/laplacian, fine scale, or 0
+    const size_t wd,
+    const size_t ht)
 {
   // blur, store only coarse res
-  const size_t cw = (wd - 1) / 2 + 1, ch = (ht - 1) / 2 + 1;
+  const size_t cw = (wd-1)/2+1, ch = (ht-1)/2+1;
 
-  float *blurred = dt_alloc_align(64, (size_t)wd * ht * 4 * sizeof(float));
+  float *blurred = dt_alloc_align(64, (size_t)wd*ht*4*sizeof(float));
   gauss_blur(input, blurred, wd, ht);
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static) shared(blurred)
-#endif
-  for(size_t j = 0; j < ch; j++)
-    for(size_t i = 0; i < cw; i++)
-      for(int c = 0; c < 4; c++) coarse[4 * (j * cw + i) + c] = blurred[4 * (2 * j * wd + 2 * i) + c];
+  for(size_t j=0;j<ch;j++) for(size_t i=0;i<cw;i++)
+    for(int c=0;c<4;c++) coarse[4*(j*cw+i)+c] = blurred[4*(2*j*wd+2*i)+c];
   dt_free_align(blurred);
 
   if(detail)
@@ -938,10 +959,8 @@ static void gauss_reduce(const float *const input, // fine input buffer
     // compute laplacian/details: expand coarse buffer into detail
     // buffer subtract expanded buffer from input in place
     gauss_expand(coarse, detail, wd, ht);
-#ifdef _OPENMP
-#pragma omp parallel for default(none) schedule(static)
-#endif
-    for(size_t k = 0; k < (size_t)wd * ht * 4; k++) detail[k] = input[k] - detail[k];
+    for(size_t k=0;k<wd*ht*4;k++)
+      detail[k] = input[k] - detail[k];
   }
 }
 
@@ -993,17 +1012,17 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) shared(col) schedule(static)
 #endif
-    for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)
+    for(size_t k = 0; k < 4ul * wd * ht; k += 4)
       col[0][k + 3] *= .1f + sqrtf(out[k] * out[k] + out[k + 1] * out[k + 1] + out[k + 2] * out[k + 2]);
 
 // #define DEBUG_VIS2
 #ifdef DEBUG_VIS2 // transform weights in channels
-    for(size_t k = 0; k < (size_t)4 * w * h; k += 4) col[0][k + e] = col[0][k + 3];
+    for(size_t k = 0; k < 4ul * w * h; k += 4) col[0][k + e] = col[0][k + 3];
 #endif
 
 // #define DEBUG_VIS
 #ifdef DEBUG_VIS // DEBUG visualise weight buffer
-    for(size_t k = 0; k < (size_t)4 * w * h; k += 4) comb[0][k + e] = col[0][k + 3];
+    for(size_t k = 0; k < 4ul * w * h; k += 4) comb[0][k + e] = col[0][k + 3];
     continue;
 #endif
 
@@ -1076,9 +1095,10 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       for(int j = 0; j < h; j++)
         for(int i = 0; i < w; i++)
         {
-          const size_t x = 4 * ((size_t)w * j + i);
+          const size_t x = 4ul * (w * j + i);
           for(int c = 0; c < 3; c++) comb[k][x + c] += out[x + c];
         }
+      }
     }
   }
 #endif
@@ -1178,10 +1198,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // now the extrapolation stuff:
   const float xm = p->basecurve[0][p->basecurve_nodes[0] - 1].x;
   const float x[4] = { 0.7f * xm, 0.8f * xm, 0.9f * xm, 1.0f * xm };
-  const float y[4]
-      = { d->table[CLAMP((int)(x[0] * 0x10000ul), 0, 0xffff)], d->table[CLAMP((int)(x[1] * 0x10000ul), 0, 0xffff)],
-          d->table[CLAMP((int)(x[2] * 0x10000ul), 0, 0xffff)],
-          d->table[CLAMP((int)(x[3] * 0x10000ul), 0, 0xffff)] };
+  const float y[4] = { d->table[CLAMP((int)(x[0] * 0x10000ul), 0, 0xffff)],
+                       d->table[CLAMP((int)(x[1] * 0x10000ul), 0, 0xffff)],
+                       d->table[CLAMP((int)(x[2] * 0x10000ul), 0, 0xffff)],
+                       d->table[CLAMP((int)(x[3] * 0x10000ul), 0, 0xffff)] };
   dt_iop_estimate_exp(x, y, 4, d->unbounded_coeffs);
 }
 
@@ -1232,15 +1252,14 @@ void init(dt_iop_module_t *module)
   module->gui_data = NULL;
   dt_iop_basecurve_params_t tmp = (dt_iop_basecurve_params_t){
     {
-        { // three curves (L, a, b) with a number of nodes
-          { 0.0, 0.0 },
-          { 1.0, 1.0 } },
+      { // three curves (L, a, b) with a number of nodes
+        { 0.0, 0.0 },
+        { 1.0, 1.0 }
+      },
     },
     { 2, 0, 0 }, // number of nodes per curve
     { MONOTONE_HERMITE, MONOTONE_HERMITE, MONOTONE_HERMITE },
-    0,
-    1.0f,
-    1.0f // no exposure fusion, but if we would, add one stop
+    0, 1.0f, 1.0f // no exposure fusion, but if we would, add one stop
   };
   memcpy(module->params, &tmp, sizeof(dt_iop_basecurve_params_t));
   memcpy(module->default_params, &tmp, sizeof(dt_iop_basecurve_params_t));
@@ -1317,7 +1336,7 @@ static float to_log(const float x, const float base)
     return x;
 }
 
-static float to_lin(const float x, float base)
+static float to_lin(const float x, const float base)
 {
   if(base > 0.0f && base != 1.0f)
     return (powf(base, x) - 1.0f) / (base - 1.0f);
@@ -1605,8 +1624,9 @@ static gboolean dt_iop_basecurve_motion_notify(GtkWidget *widget, GdkEventMotion
     int nearest = -1;
     for(int k = 0; k < nodes; k++)
     {
-      float dist = (my - to_log(basecurve[k].y, c->loglogscale)) * (my - to_log(basecurve[k].y, c->loglogscale))
-                   + (mx - to_log(basecurve[k].x, c->loglogscale)) * (mx - to_log(basecurve[k].x, c->loglogscale));
+      float dist
+          = (my - to_log(basecurve[k].y, c->loglogscale)) * (my - to_log(basecurve[k].y, c->loglogscale))
+            + (mx - to_log(basecurve[k].x, c->loglogscale)) * (mx - to_log(basecurve[k].x, c->loglogscale));
       if(dist < min)
       {
         min = dist;
@@ -1633,8 +1653,8 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
 
   if(event->button == 1)
   {
-    if(event->type == GDK_BUTTON_PRESS && (event->state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK && nodes < MAXNODES
-       && c->selected == -1)
+    if(event->type == GDK_BUTTON_PRESS && (event->state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK
+      && nodes < MAXNODES && c->selected == -1)
     {
       // if we are not on a node -> add a new node at the current x of the pointer and y of the curve at that x
       const int inset = DT_GUI_CURVE_EDITOR_INSET;
@@ -1665,8 +1685,8 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget, GdkEventButton 
       if(selected == -1) selected = nodes;
       // > 0 -> check distance to left neighbour
       // < nodes -> check distance to right neighbour
-      if(!((selected > 0 && linx - basecurve[selected - 1].x <= 0.025)
-           || (selected < nodes && basecurve[selected].x - linx <= 0.025)))
+      if(!((selected > 0 && linx - basecurve[selected - 1].x <= 0.025) ||
+           (selected < nodes && basecurve[selected].x - linx <= 0.025)))
       {
         // evaluate the curve at the current x position
         const float y = dt_draw_curve_calc_value(c->minmax_curve, linx);

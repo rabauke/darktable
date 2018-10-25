@@ -1679,7 +1679,7 @@ const std::vector<film_map> dt_iop_gmic_film_emulation_params_t::film_maps{
   { "agfa_precisa_100", _("Agfa Precisa 100") },
   { "fuji_astia_100f", _("Fuji Astia 100f") },
   { "fuji_fp_100c", _("Fuji FP-100c") },
-  { "fuji_provia_100f", _("Fuji Pprovia 100F") },
+  { "fuji_provia_100f", _("Fuji Provia 100F") },
   { "fuji_provia_400f", _("Fuji Provia 400F") },
   { "fuji_provia_400x", _("Fuji Provia 400X") },
   { "fuji_sensia_100", _("Fuji Sensia 100") },
