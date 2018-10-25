@@ -641,7 +641,6 @@ int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piec
       h = (h - 1) / 2 + 1;
     }
 
-    do
     {
       // normalize both gaussian base and laplacian
       size_t sizes[] = { ROUNDUPWD(w), ROUNDUPHT(h), 1 };
@@ -1098,7 +1097,6 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
           const size_t x = 4ul * (w * j + i);
           for(int c = 0; c < 3; c++) comb[k][x + c] += out[x + c];
         }
-      }
     }
   }
 #endif
