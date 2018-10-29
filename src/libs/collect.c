@@ -246,7 +246,6 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
 #endif
 
   gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(filechooser), FALSE);
-
   if(tree_path != NULL)
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), tree_path);
   else
@@ -1098,7 +1097,6 @@ static void list_view(dt_lib_collect_rule_t *dr)
   set_properties(dr);
 
   GtkTreeModel *model = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(d->listfilter));
-
   if(d->view_rule != property)
   {
     sqlite3_stmt *stmt;
@@ -1246,6 +1244,14 @@ static void list_view(dt_lib_collect_rule_t *dr)
         g_snprintf(query, sizeof(query), "SELECT ROUND(aperture,1) AS aperture, 1, COUNT(*) AS count "
                            "FROM main.images WHERE %s GROUP BY aperture ORDER BY aperture",
                    where_ext);
+        break;
+
+      case DT_COLLECTION_PROP_EXPOSURE: // exposure
+        g_snprintf(query, sizeof(query), "SELECT CASE WHEN (exposure < 0.4) "
+                              "THEN '1/' || CAST(1/exposure + 0.9 AS INTEGER) "
+                           "ELSE ROUND(exposure,2) || '\"' END as _exposure, 1, COUNT(*) AS count "
+                "FROM main.images WHERE %s GROUP BY _exposure ORDER BY exposure",
+                  where_ext);
         break;
 
       case DT_COLLECTION_PROP_FILENAME: // filename
@@ -1440,7 +1446,8 @@ static void combo_changed(GtkComboBox *combo, dt_lib_collect_rule_t *d)
   }
 
   if(property == DT_COLLECTION_PROP_APERTURE || property == DT_COLLECTION_PROP_FOCAL_LENGTH
-     || property == DT_COLLECTION_PROP_ISO || property == DT_COLLECTION_PROP_ASPECT_RATIO)
+     || property == DT_COLLECTION_PROP_ISO || property == DT_COLLECTION_PROP_ASPECT_RATIO
+     || property == DT_COLLECTION_PROP_EXPOSURE)
   {
     gtk_widget_set_tooltip_text(d->text, _("type your query, use <, <=, >, >=, <>, =, [;] as operators"));
   }
@@ -1777,6 +1784,7 @@ void gui_init(dt_lib_module_t *self)
 
   self->data = (void *)d;
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
 
   d->active_rule = 0;
   d->nb_rules = 0;
@@ -2058,6 +2066,7 @@ void init(struct dt_lib_module_t *self)
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_ISO);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_APERTURE);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_ASPECT_RATIO);
+  luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_EXPOSURE);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_FILENAME);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_GEOTAGGING);
   luaA_enum_value(L,dt_collection_properties_t,DT_COLLECTION_PROP_LOCAL_COPY);
