@@ -158,6 +158,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {67.5f }, "dither", 0},
   { {68.0f }, "borders", 0},
   { {69.0f }, "watermark", 0},
+  { {70.0f }, "gmic", 0},
   { {71.0f }, "gamma", 0},
   { { 0.0f }, "", 0}
 };
@@ -253,6 +254,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {67.0f }, "splittoning", 0},     // creative module
   { {68.0f }, "vignette", 0},        // creative module
   { {69.0f }, "colorreconstruct", 0},// try to salvage blown areas before ICC intents in LittleCMS2 do things with them.
+  { {69.5f }, "gmic", 0},
   { {70.0f }, "colorout", 0},
   { {71.0f }, "clahe", 0},
   { {72.0f }, "finalscale", 0},
@@ -261,6 +263,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {75.0f }, "dither", 0},
   { {76.0f }, "borders", 0},
   { {77.0f }, "watermark", 0},
+  { {77.5f }, "gmic", 0},
   { {78.0f }, "gamma", 0},
   { { 0.0f }, "", 0 }
 };
