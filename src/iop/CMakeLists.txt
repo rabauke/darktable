@@ -163,6 +163,10 @@ endif(Rsvg2_FOUND)
 
 add_iop(lens "lens.cc" DEFAULT_VISIBLE)
 
+if(GMIC_FOUND)
+  add_iop(gmic "gmic.cc")
+endif(GMIC_FOUND)
+
 # fix for Mac when OpenMP is only available in C compiler
 if(APPLE)
   set_target_properties(demosaic PROPERTIES LINKER_LANGUAGE C)
