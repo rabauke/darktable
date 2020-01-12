@@ -1639,6 +1639,7 @@ void init_presets(dt_lib_module_t *self)
   AM("censorize");
   AM("blurs");
   AM("diffuse");
+  AM("gmic");
 
   dt_lib_presets_add(_("modules: all"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
